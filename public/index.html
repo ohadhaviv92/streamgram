@@ -1,0 +1,870 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TG2Stream setup</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: #0d1117;
+        color: #e6edf3;
+      }
+      main {
+        width: min(760px, 100%);
+        margin: 0 auto;
+        padding: 32px 18px 56px;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: clamp(28px, 6vw, 42px);
+      }
+      .site-logo {
+        display: block;
+        width: 100%;
+        height: auto;
+        margin: 0 0 4px;
+      }
+      h2 {
+        margin: 0 0 12px;
+      }
+      p {
+        color: #9da7b3;
+        line-height: 1.55;
+      }
+      a {
+        color: #79c0ff;
+      }
+      .card {
+        background: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 14px;
+        padding: 22px;
+        margin-top: 18px;
+      }
+      .muted {
+        color: #9da7b3;
+        font-size: 14px;
+      }
+      .notice {
+        border-radius: 10px;
+        padding: 12px 14px;
+        margin: 14px 0;
+        line-height: 1.45;
+      }
+      .error {
+        background: #3d1f28;
+        border: 1px solid #8e3b46;
+        color: #ffb4ab;
+      }
+      .success {
+        background: #173225;
+        border: 1px solid #347d4b;
+        color: #aff5bd;
+      }
+      .info {
+        background: #17283b;
+        border: 1px solid #2f5f89;
+        color: #b6d7f5;
+      }
+      .hidden {
+        display: none !important;
+      }
+      label {
+        display: block;
+        font-size: 14px;
+        font-weight: 650;
+        margin: 16px 0 7px;
+      }
+      input,
+      select {
+        width: 100%;
+        border: 1px solid #484f58;
+        border-radius: 8px;
+        background: #0d1117;
+        color: #e6edf3;
+        padding: 11px 12px;
+        font-size: 16px;
+      }
+      input:focus,
+      select:focus {
+        outline: 2px solid #388bfd;
+        border-color: transparent;
+      }
+      button {
+        border: 0;
+        border-radius: 8px;
+        background: #238636;
+        color: white;
+        font-weight: 700;
+        font-size: 15px;
+        padding: 11px 16px;
+        cursor: pointer;
+        margin-top: 18px;
+      }
+      button.secondary {
+        background: #30363d;
+      }
+      button.link {
+        background: transparent;
+        color: #79c0ff;
+        padding-left: 0;
+      }
+      button:disabled {
+        cursor: wait;
+        opacity: 0.6;
+      }
+      .row {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 12px;
+      }
+      .check-list {
+        max-height: 300px;
+        overflow: auto;
+        border: 1px solid #30363d;
+        border-radius: 8px;
+        margin-top: 10px;
+      }
+      .check {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        padding: 11px 12px;
+        border-bottom: 1px solid #21262d;
+      }
+      .check:last-child {
+        border-bottom: 0;
+      }
+      .check input {
+        width: auto;
+      }
+      #qr-image {
+        display: block;
+        width: min(300px, 100%);
+        background: white;
+        padding: 8px;
+        border-radius: 10px;
+        margin: 16px auto;
+      }
+      code,
+      .copy-box {
+        word-break: break-all;
+        font-family: ui-monospace, SFMono-Regular, monospace;
+      }
+      .copy-box {
+        background: #0d1117;
+        border: 1px solid #30363d;
+        border-radius: 8px;
+        padding: 12px;
+        margin-top: 10px;
+      }
+      ol {
+        color: #9da7b3;
+        line-height: 1.65;
+        padding-left: 22px;
+      }
+      .status {
+        font-size: 14px;
+        min-height: 20px;
+        color: #9da7b3;
+        margin-top: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img src="/logo.png" alt="TG2Stream" class="site-logo" />
+      <p class="muted">
+        Private, single-instance setup for your VPS. Your Telegram session and
+        API keys stay on this server.
+      </p>
+      <div id="message" class="notice hidden"></div>
+
+      <section id="config-card" class="card hidden">
+        <h2>1. Configure services</h2>
+        <p>
+          Values already configured by the environment or local config are
+          loaded automatically. Secret values stay on the server; leave their
+          fields blank to keep them unchanged.
+        </p>
+        <form id="config-form">
+          <label for="public-url">Public HTTPS URL</label>
+          <input
+            id="public-url"
+            type="url"
+            placeholder="https://stream.example.com"
+            required
+          />
+          <p class="muted">
+            This must point to this VPS and be reachable by Stremio. HTTPS is
+            required by most Stremio clients.
+          </p>
+
+          <div class="grid">
+            <div>
+              <label for="api-id">Telegram API ID</label>
+              <input id="api-id" type="string" min="1" placeholder="123456" />
+            </div>
+            <div>
+              <label for="api-hash">Telegram API hash</label>
+              <input
+                id="api-hash"
+                type="password"
+                autocomplete="off"
+                placeholder="from my.telegram.org"
+              />
+              <div id="api-hash-status" class="muted"></div>
+            </div>
+          </div>
+          <p class="muted">
+            Create Telegram credentials at
+            <a href="https://my.telegram.org" target="_blank" rel="noreferrer"
+              >my.telegram.org</a
+            >.
+          </p>
+
+          <label for="tmdb-token">TMDB Read Access Token</label>
+          <input
+            id="tmdb-token"
+            type="password"
+            autocomplete="off"
+            placeholder="eyJ..."
+          />
+          <div id="tmdb-status" class="muted"></div>
+          <p class="muted">
+            Create or copy the v4 token at
+            <a
+              href="https://www.themoviedb.org/settings/api"
+              target="_blank"
+              rel="noreferrer"
+              >TMDB API settings</a
+            >.
+          </p>
+
+          <label for="language">Preferred language</label>
+          <select id="language">
+            <option value="en">English</option>
+            <option value="he">עברית</option>
+            <option value="ru">Русский</option>
+            <option value="ar">العربية</option>
+          </select>
+          <button>Save configuration</button>
+        </form>
+        <div id="config-status" class="status"></div>
+      </section>
+
+      <section id="telegram-card" class="card hidden">
+        <h2>2. Connect Telegram</h2>
+        <p>
+          Use QR login from the Telegram mobile app, or use the phone-code
+          method if QR is unavailable. TG2Stream stores only the resulting
+          session on this VPS.
+        </p>
+        <div id="telegram-connected" class="notice success hidden">
+          Telegram is connected.
+        </div>
+        <div id="qr-area">
+          <button id="qr-button">Generate Telegram QR code</button>
+          <img id="qr-image" class="hidden" alt="Telegram login QR code" />
+          <div id="qr-status" class="status"></div>
+        </div>
+        <div class="row">
+          <button id="phone-toggle" class="secondary">
+            Use phone code instead
+          </button>
+        </div>
+        <form id="phone-form" class="hidden">
+          <label for="phone">Telegram phone number</label>
+          <input
+            id="phone"
+            type="tel"
+            placeholder="+15551234567"
+            autocomplete="tel"
+          />
+          <button>Send code</button>
+        </form>
+        <form id="code-form" class="hidden">
+          <label for="code">Telegram code</label>
+          <input id="code" inputmode="numeric" autocomplete="one-time-code" />
+          <label for="password">Telegram 2FA password (if enabled)</label>
+          <input
+            id="password"
+            type="password"
+            autocomplete="current-password"
+          />
+          <button>Verify Telegram code</button>
+        </form>
+        <div id="auth-status" class="status"></div>
+      </section>
+
+      <section id="selection-card" class="card hidden">
+        <h2>3. Choose sources</h2>
+        <p>
+          Load the Telegram sources when you are ready, then select which
+          folders and channels TG2Stream should search.
+        </p>
+        <button id="load-sources" type="button">
+          Load folders and channels
+        </button>
+        <div id="load-sources-status" class="status"></div>
+        <div class="grid">
+          <div>
+            <h3>Folders</h3>
+            <div id="folders" class="check-list">
+              <p class="muted" style="padding: 12px">Not loaded yet.</p>
+            </div>
+          </div>
+          <div>
+            <h3>Channels</h3>
+            <input
+              id="channel-search"
+              class="hidden"
+              type="search"
+              placeholder="Search channels by title or username"
+            />
+            <div id="channels" class="check-list">
+              <p class="muted" style="padding: 12px">Not loaded yet.</p>
+            </div>
+          </div>
+        </div>
+        <button id="save-sources">Save selected sources</button>
+        <div id="source-status" class="status"></div>
+      </section>
+
+      <section id="done-card" class="card hidden">
+        <h2>Ready for Stremio</h2>
+        <p>
+          Install this addon in Stremio using the manifest URL below. It
+          contains no user token because this VPS has one private instance.
+        </p>
+        <div id="manifest-url" class="copy-box"></div>
+        <div class="row">
+          <button id="copy-manifest">Copy manifest URL</button>
+          <a
+            id="open-stremio"
+            class="button"
+            style="
+              display: inline-block;
+              margin-top: 18px;
+              padding: 11px 16px;
+              border-radius: 8px;
+              background: #8957e5;
+              color: white;
+              text-decoration: none;
+              font-weight: 700;
+            "
+            href="#"
+            >Open in Stremio</a
+          >
+        </div>
+        <p class="muted">
+          You can return to this page later to refresh Telegram folders/channels
+          or update settings.
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>Backup &amp; Restore</h2>
+        <p>
+          Export your full configuration (including API keys and session) as a
+          JSON file, or import a previously exported file to restore this
+          instance.
+        </p>
+        <div class="notice info" style="margin-top: 0">
+          &#x26A0;&#xFE0F; The export file contains sensitive secrets. Keep it
+          private and protect this page at the network/proxy level.
+        </div>
+        <div class="row">
+          <button id="export-config">Export config.json</button>
+          <button id="import-trigger" class="secondary">
+            Import config.json
+          </button>
+          <input
+            id="import-file"
+            type="file"
+            accept=".json,application/json"
+            class="hidden"
+          />
+        </div>
+        <div id="backup-status" class="status"></div>
+      </section>
+    </main>
+    <script>
+      const $ = (id) => document.getElementById(id);
+      let setupStatus = null;
+      let qrToken = null;
+      let qrTimer = null;
+      let phone = "";
+      let folders = [];
+      let channels = [];
+      let foldersLoaded = false;
+      let channelsLoaded = false;
+      const selectedFolderIds = new Set();
+      const selectedChannelIds = new Set();
+
+      function showMessage(text, kind = "info") {
+        const node = $("message");
+        node.textContent = text;
+        node.className = `notice ${kind}`;
+      }
+      function clearMessage() {
+        $("message").className = "notice hidden";
+      }
+      function show(id, visible = true) {
+        $(id).classList.toggle("hidden", !visible);
+      }
+      async function api(path, options = {}) {
+        const response = await fetch(path, {
+          credentials: "same-origin",
+          headers: {
+            "Content-Type": "application/json",
+            ...(options.headers || {}),
+          },
+          ...options,
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok)
+          throw new Error(
+            data.message || `Request failed (${response.status})`,
+          );
+        return data;
+      }
+      function setBusy(button, busy) {
+        if (!button) return;
+        button.disabled = busy;
+        button.dataset.idleText ||= button.textContent;
+        button.textContent = busy ? "Working…" : button.dataset.idleText;
+      }
+      function showEmpty(containerId, text) {
+        const empty = document.createElement("p");
+        empty.className = "muted";
+        empty.style.padding = "12px";
+        empty.textContent = text;
+        $(containerId).replaceChildren(empty);
+      }
+      function renderChecks(
+        containerId,
+        items,
+        selectedIds,
+        label,
+        formatLabel,
+      ) {
+        const container = $(containerId);
+        container.replaceChildren();
+        if (!items.length) {
+          showEmpty(containerId, `No ${label} found.`);
+          return;
+        }
+        for (const item of items) {
+          const row = document.createElement("label");
+          row.className = "check";
+          const id = String(item.id);
+          const input = document.createElement("input");
+          input.type = "checkbox";
+          input.value = id;
+          input.checked = selectedIds.has(id);
+          input.addEventListener("change", () => {
+            if (input.checked) selectedIds.add(id);
+            else selectedIds.delete(id);
+          });
+          const text = document.createElement("span");
+          text.textContent = formatLabel(item);
+          row.append(input, text);
+          container.append(row);
+        }
+      }
+      function renderFolders() {
+        renderChecks(
+          "folders",
+          folders,
+          selectedFolderIds,
+          "folders",
+          (folder) => folder.title || String(folder.id),
+        );
+      }
+      function renderChannels() {
+        const query = $("channel-search").value.trim().toLowerCase();
+        const visible = channels.filter(
+          (channel) =>
+            !query ||
+            (channel.title || "").toLowerCase().includes(query) ||
+            (channel.username || "").toLowerCase().includes(query),
+        );
+        if (!visible.length) {
+          showEmpty(
+            "channels",
+            query ? "No matching channels found." : "No channels found.",
+          );
+          return;
+        }
+        renderChecks(
+          "channels",
+          visible,
+          selectedChannelIds,
+          "channels",
+          (channel) =>
+            channel.username
+              ? `${channel.title} (@${channel.username})`
+              : channel.title || String(channel.id),
+        );
+      }
+      function manifestUrl() {
+        const base = (setupStatus?.publicUrl || location.origin).replace(/\/$/, "");
+        return `${base}/manifest.json`;
+      }
+      function refreshDone() {
+        const url = manifestUrl();
+        $("manifest-url").textContent = url;
+        $("open-stremio").href = `stremio://${url.replace(/^https?:\/\//, "")}`;
+        show("done-card");
+      }
+      function updateSecretPlaceholders() {
+        $("api-hash").placeholder =
+          setupStatus?.apiHashPrefix || "from my.telegram.org";
+        $("tmdb-token").placeholder = setupStatus?.tmdbTokenPrefix || "eyJ...";
+        $("api-hash-status").textContent = "";
+        $("tmdb-status").textContent = "";
+      }
+      function mergeSourceSelection(items, selectedIds, wasLoaded) {
+        if (!wasLoaded) {
+          selectedIds.clear();
+          for (const item of items)
+            if (item.isSelected) selectedIds.add(String(item.id));
+        }
+      }
+      function phoneLast4(phone) {
+        const digits = String(phone || "").replace(/\D/g, "");
+        return digits.length >= 4 ? digits.slice(-4) : null;
+      }
+      function showTelegramConnected(phone) {
+        const suffix = phoneLast4(phone) || setupStatus?.telegramPhoneLast4;
+        $("telegram-connected").textContent = suffix
+          ? `Telegram is connected (phone ending in ${suffix}).`
+          : "Telegram is connected.";
+        show("telegram-connected");
+      }
+
+      async function loadStatus() {
+        setupStatus = await api("/setup/status", { headers: {} });
+        clearMessage();
+        show("config-card");
+        show("telegram-card");
+        $("public-url").value = setupStatus.publicUrl || location.origin;
+        $("api-id").value = setupStatus.apiId || "";
+        $("language").value = setupStatus.preferredLanguage || "en";
+        updateSecretPlaceholders();
+        if (setupStatus.telegramAuthenticated) await onTelegramConnected();
+      }
+      async function saveConfig(event) {
+        event.preventDefault();
+        const button = event.submitter;
+        setBusy(button, true);
+        try {
+          const body = {
+            publicUrl: $("public-url").value.trim(),
+            apiId: $("api-id").value ? Number($("api-id").value) : undefined,
+            apiHash: $("api-hash").value.trim() || undefined,
+            tmdbBearerToken: $("tmdb-token").value.trim() || undefined,
+            preferredLanguage: $("language").value,
+          };
+          const data = await api("/setup/config", {
+            method: "POST",
+            body: JSON.stringify(body),
+          });
+          $("config-status").textContent = data.setupComplete
+            ? "Configuration is complete."
+            : `Still missing: ${data.missing.join(", ")}`;
+          showMessage("Configuration saved.", "success");
+          await loadStatus();
+        } catch (error) {
+          showMessage(error.message, "error");
+        } finally {
+          setBusy(button, false);
+        }
+      }
+      async function onTelegramConnected(phone) {
+        showTelegramConnected(phone);
+        show("selection-card");
+        $("auth-status").textContent =
+          "Telegram authentication completed. Load sources when ready.";
+        refreshDone();
+      }
+      async function generateQr() {
+        const button = $("qr-button");
+        setBusy(button, true);
+        clearMessage();
+        try {
+          const data = await api("/auth/qr/generate", {
+            method: "POST",
+            body: "{}",
+          });
+          qrToken = data.qrToken;
+          $("qr-image").src = data.qrCodeImage;
+          show("qr-image");
+          $("qr-status").textContent = "Scan this code in Telegram. Waiting…";
+          clearInterval(qrTimer);
+          qrTimer = setInterval(checkQr, 2500);
+        } catch (error) {
+          showMessage(error.message, "error");
+        } finally {
+          setBusy(button, false);
+        }
+      }
+      async function checkQr() {
+        if (!qrToken) return;
+        try {
+          const data = await api(
+            `/auth/qr/status/${encodeURIComponent(qrToken)}`,
+            { headers: {} },
+          );
+          $("qr-status").textContent = data.message;
+          if (data.status === "authorized") {
+            clearInterval(qrTimer);
+            qrToken = null;
+            await onTelegramConnected(data.user?.phone);
+          } else if (data.status === "expired") {
+            clearInterval(qrTimer);
+            qrToken = null;
+          }
+        } catch (error) {
+          clearInterval(qrTimer);
+          showMessage(error.message, "error");
+        }
+      }
+      async function sendCode(event) {
+        event.preventDefault();
+        const button = event.submitter;
+        phone = $("phone").value.trim();
+        setBusy(button, true);
+        try {
+          const data = await api("/auth/send-code", {
+            method: "POST",
+            body: JSON.stringify({ phone }),
+          });
+          if (!data.success) throw new Error(data.message);
+          show("code-form");
+          $("auth-status").textContent = data.message;
+        } catch (error) {
+          showMessage(error.message, "error");
+        } finally {
+          setBusy(button, false);
+        }
+      }
+      async function verifyCode(event) {
+        event.preventDefault();
+        const button = event.submitter;
+        setBusy(button, true);
+        try {
+          const data = await api("/auth/verify-code", {
+            method: "POST",
+            body: JSON.stringify({
+              phone,
+              code: $("code").value.trim(),
+              password: $("password").value || undefined,
+            }),
+          });
+          if (data.passwordRequired) {
+            $("auth-status").textContent = data.message;
+            return;
+          }
+          await onTelegramConnected(data.user?.phone);
+        } catch (error) {
+          showMessage(error.message, "error");
+        } finally {
+          setBusy(button, false);
+        }
+      }
+      async function loadSources() {
+        const button = $("load-sources");
+        setBusy(button, true);
+        $("load-sources-status").textContent = "Loading folders and channels…";
+        const results = await Promise.allSettled([
+          api("/folders", { headers: {} }),
+          api("/channels", { headers: {} }),
+        ]);
+        const errors = [];
+        if (
+          results[0].status === "fulfilled" &&
+          results[0].value.success !== false
+        ) {
+          const nextFolders = results[0].value.folders || [];
+          mergeSourceSelection(nextFolders, selectedFolderIds, foldersLoaded);
+          folders = nextFolders;
+          foldersLoaded = true;
+          renderFolders();
+        } else {
+          errors.push("folders");
+          showEmpty("folders", "Folders could not be loaded.");
+        }
+        if (
+          results[1].status === "fulfilled" &&
+          results[1].value.success !== false
+        ) {
+          const nextChannels = results[1].value.channels || [];
+          mergeSourceSelection(
+            nextChannels,
+            selectedChannelIds,
+            channelsLoaded,
+          );
+          channels = nextChannels;
+          channelsLoaded = true;
+          show("channel-search", true);
+          renderChannels();
+        } else {
+          errors.push("channels");
+          show("channel-search", false);
+          showEmpty("channels", "Channels could not be loaded.");
+        }
+        if (foldersLoaded || channelsLoaded) {
+          button.dataset.idleText = "Refresh folders and channels";
+        }
+        $("load-sources-status").textContent = errors.length
+          ? `Could not load: ${errors.join(" and ")}.`
+          : "Sources loaded.";
+        if (errors.length)
+          showMessage(`Could not load ${errors.join(" and ")}.`, "error");
+        setBusy(button, false);
+      }
+      async function saveSources() {
+        const button = $("save-sources");
+        setBusy(button, true);
+        try {
+          const requests = [];
+          if (foldersLoaded)
+            requests.push(
+              api("/folders", {
+                method: "POST",
+                body: JSON.stringify({
+                  folderIds: [...selectedFolderIds].map(Number),
+                }),
+              }),
+            );
+          if (channelsLoaded)
+            requests.push(
+              api("/channels", {
+                method: "POST",
+                body: JSON.stringify({ channelIds: [...selectedChannelIds] }),
+              }),
+            );
+          if (!requests.length) {
+            $("source-status").textContent =
+              "Load folders and channels before saving source selections.";
+            return;
+          }
+          const results = await Promise.allSettled(requests);
+          const failures = results.filter(
+            (result) => result.status === "rejected",
+          ).length;
+          if (failures)
+            throw new Error(
+              `${failures} source selection request${failures === 1 ? "" : "s"} failed.`,
+            );
+          $("source-status").textContent = "Sources saved.";
+          showMessage(
+            "Setup complete. Install the addon in Stremio.",
+            "success",
+          );
+          refreshDone();
+        } catch (error) {
+          showMessage(error.message, "error");
+        } finally {
+          setBusy(button, false);
+        }
+      }
+
+      $("config-form").addEventListener("submit", saveConfig);
+      $("qr-button").addEventListener("click", generateQr);
+      $("phone-toggle").addEventListener("click", () => show("phone-form"));
+      $("phone-form").addEventListener("submit", sendCode);
+      $("code-form").addEventListener("submit", verifyCode);
+      $("load-sources").addEventListener("click", loadSources);
+      $("channel-search").addEventListener("input", renderChannels);
+      $("save-sources").addEventListener("click", saveSources);
+      $("copy-manifest").addEventListener("click", async () => {
+        await navigator.clipboard.writeText($("manifest-url").textContent);
+        showMessage("Manifest URL copied.", "success");
+      });
+
+      // ── Backup & Restore ──────────────────────────────────────────────────
+      $("export-config").addEventListener("click", async () => {
+        const button = $("export-config");
+        setBusy(button, true);
+        $("backup-status").textContent = "";
+        try {
+          const response = await fetch("/setup/config/export", {
+            credentials: "same-origin",
+          });
+          if (!response.ok)
+            throw new Error(`Export failed (${response.status})`);
+          const blob = await response.blob();
+          const disposition = response.headers.get("Content-Disposition") || "";
+          const match = disposition.match(/filename="([^"]+)"/);
+          const filename = match ? match[1] : "tg2stream-config.json";
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = filename;
+          a.click();
+          URL.revokeObjectURL(url);
+          $("backup-status").textContent = `Downloaded ${filename}.`;
+        } catch (error) {
+          showMessage(error.message, "error");
+        } finally {
+          setBusy(button, false);
+        }
+      });
+
+      $("import-trigger").addEventListener("click", () =>
+        $("import-file").click(),
+      );
+
+      $("import-file").addEventListener("change", async () => {
+        const file = $("import-file").files[0];
+        if (!file) return;
+        const button = $("import-trigger");
+        setBusy(button, true);
+        $("backup-status").textContent = "";
+        try {
+          const text = await file.text();
+          let parsed;
+          try {
+            parsed = JSON.parse(text);
+          } catch {
+            throw new Error("The selected file is not valid JSON.");
+          }
+          const data = await api("/setup/config/import", {
+            method: "POST",
+            body: JSON.stringify(parsed),
+          });
+          $("backup-status").textContent = data.message || "Import successful.";
+          showMessage("Config imported. Reloading status…", "success");
+          await loadStatus();
+        } catch (error) {
+          showMessage(error.message, "error");
+        } finally {
+          setBusy(button, false);
+          // Reset so re-selecting the same file fires change again
+          $("import-file").value = "";
+        }
+      });
+      // ─────────────────────────────────────────────────────────────────────
+
+      loadStatus().catch((error) => showMessage(error.message, "error"));
+    </script>
+  </body>
+</html>
