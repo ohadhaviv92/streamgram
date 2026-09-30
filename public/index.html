@@ -22,6 +22,7 @@
         width: min(800px, 100%);
         margin: 0 auto;
         padding: 32px 18px 56px;
+        position: relative;
       }
       h1 {
         margin: 0 0 8px;
@@ -103,7 +104,7 @@
       button {
         border: 0;
         border-radius: 8px;
-        background: #238636;
+        background: #2aabee;
         color: white;
         font-weight: 700;
         font-size: 15px;
@@ -235,6 +236,21 @@
         margin-left: 5px;
         font-size: 13px;
       }
+      .tab-btn .tab-warn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-left: 6px;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: #8e3b46;
+        color: #ffb4ab;
+        font-size: 11px;
+        font-weight: 800;
+        line-height: 1;
+        vertical-align: middle;
+      }
 
       .tab-panel {
         display: none;
@@ -353,10 +369,10 @@
         <!-- Tab bar -->
         <div class="tab-bar" role="tablist">
           <button class="tab-btn" role="tab" data-tab="config" aria-selected="false">
-            ⚙️ Configuration<span class="tab-check hidden" id="check-config">✅</span>
+            ⚙️ Configuration<span class="tab-check hidden" id="check-config">✅</span><span class="tab-warn hidden" id="warn-config">!</span>
           </button>
           <button class="tab-btn" role="tab" data-tab="telegram" aria-selected="false">
-            🔐 Telegram Auth<span class="tab-check hidden" id="check-telegram">✅</span>
+            🔐 Telegram Auth<span class="tab-check hidden" id="check-telegram">✅</span><span class="tab-warn hidden" id="warn-telegram">!</span>
           </button>
           <button class="tab-btn" role="tab" data-tab="sources" aria-selected="false">
             📂 Sources<span class="tab-check hidden" id="check-sources">✅</span>
@@ -459,14 +475,6 @@
             </div>
           </div>
 
-          <button
-            class="add-account-btn"
-            disabled
-            title="Multi-account support is coming in a future release"
-          >
-            ＋ Add account <span style="font-size: 11px; opacity: 0.7">(coming soon)</span>
-          </button>
-
           <hr style="border-color: #30363d; margin: 22px 0 18px" />
 
           <p>
@@ -474,9 +482,7 @@
             method if QR is unavailable. TG2Stream stores only the resulting
             session on this VPS.
           </p>
-          <div id="telegram-connected" class="notice success hidden">
-            Telegram is connected.
-          </div>
+
           <div id="qr-area">
             <button id="qr-button">Generate Telegram QR code</button>
             <img id="qr-image" class="hidden" alt="Telegram login QR code" />
@@ -681,17 +687,29 @@
       function setTabDone(name, done) {
         const checkEl = $(`check-${name}`);
         if (checkEl) checkEl.classList.toggle("hidden", !done);
+        const warnEl = $(`warn-${name}`);
+        if (warnEl) warnEl.classList.toggle("hidden", done);
         const btn = document.querySelector(`.tab-btn[data-tab="${name}"]`);
         if (btn) btn.setAttribute("aria-done", String(done));
       }
 
+      /** Returns true when all non-telegram config fields are saved */
+      function isConfigFieldsDone(status) {
+        return !!(
+          status?.publicUrl &&
+          status?.apiId &&
+          status?.apiHashPrefix &&
+          status?.tmdbTokenPrefix
+        );
+      }
+
       /** Pick the best default tab based on current status */
       function resolveDefaultTab(status) {
-        const configDone = status?.setupComplete === true;
+        const configDone = isConfigFieldsDone(status);
         const telegramDone = status?.telegramAuthenticated === true;
         if (!configDone) return "config";
         if (!telegramDone) return "telegram";
-        return "stremio"; // both required steps done → show Stremio
+        return "stremio";
       }
 
       // ── Source rendering ─────────────────────────────────────────────────────
@@ -791,11 +809,7 @@
         // Update account stub
         $("account-sub").textContent = sub;
         show("account-stub-connected");
-        // Legacy notice (kept for in-panel confirmation)
-        $("telegram-connected").textContent = suffix
-          ? `Telegram is connected (phone ending in ${suffix}).`
-          : "Telegram is connected.";
-        show("telegram-connected");
+
       }
       function updateSecretPlaceholders() {
         $("api-hash").placeholder =
@@ -816,7 +830,7 @@
         updateSecretPlaceholders();
 
         // Mark tabs done
-        setTabDone("config", !!setupStatus.setupComplete);
+        setTabDone("config", isConfigFieldsDone(setupStatus));
         setTabDone("telegram", !!setupStatus.telegramAuthenticated);
 
         if (setupStatus.telegramAuthenticated) {
@@ -844,13 +858,19 @@
             method: "POST",
             body: JSON.stringify(body),
           });
+          const isMissingOnlyTelegram =
+            !data.setupComplete &&
+            data.missing?.length === 1 &&
+            data.missing[0].toLowerCase().includes("telegram");
+
           $("config-status").textContent = data.setupComplete
             ? "Configuration is complete."
-            : `Still missing: ${data.missing.join(", ")}`;
+            : isMissingOnlyTelegram
+              ? "Configuration saved. Connect Telegram to finish setup."
+              : `Still missing: ${data.missing.join(", ")}`;
           showMessage("Configuration saved.", "success");
           await loadStatus();
-          // Auto-advance to Telegram Auth tab
-          if (data.setupComplete) activateTab("telegram");
+          // loadStatus → resolveDefaultTab handles navigation automatically
         } catch (error) {
           showMessage(error.message, "error");
         } finally {
@@ -870,8 +890,8 @@
           setupStatus = await api("/setup/status", { headers: {} }).catch(() => setupStatus);
         }
         refreshStremioPanel();
-        // Auto-advance to Stremio tab after connecting
-        if (p) activateTab("stremio");
+        // Auto-advance to Sources tab after connecting
+        if (p) activateTab("sources");
       }
 
       // ── QR auth ─────────────────────────────────────────────────────────────
