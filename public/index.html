@@ -19,7 +19,7 @@
         color: #e6edf3;
       }
       main {
-        width: min(760px, 100%);
+        width: min(800px, 100%);
         margin: 0 auto;
         padding: 32px 18px 56px;
       }
@@ -36,19 +36,15 @@
       h2 {
         margin: 0 0 12px;
       }
+      h3 {
+        margin: 16px 0 8px;
+      }
       p {
         color: #9da7b3;
         line-height: 1.55;
       }
       a {
         color: #79c0ff;
-      }
-      .card {
-        background: #161b22;
-        border: 1px solid #30363d;
-        border-radius: 14px;
-        padding: 22px;
-        margin-top: 18px;
       }
       .muted {
         color: #9da7b3;
@@ -74,6 +70,11 @@
         background: #17283b;
         border: 1px solid #2f5f89;
         color: #b6d7f5;
+      }
+      .warning {
+        background: #2d2208;
+        border: 1px solid #6e4c0d;
+        color: #f0c060;
       }
       .hidden {
         display: none !important;
@@ -184,7 +185,136 @@
         color: #9da7b3;
         margin-top: 12px;
       }
-      /* ── Copy toast ────────────────────────────────────── */
+
+      /* ── Global message ─────────────────────────────────── */
+      #message {
+        margin-bottom: 4px;
+      }
+
+      /* ── Tab bar ────────────────────────────────────────── */
+      .tab-shell {
+        background: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 14px;
+        margin-top: 18px;
+        overflow: hidden;
+      }
+      .tab-bar {
+        display: flex;
+        border-bottom: 1px solid #30363d;
+        overflow-x: auto;
+        scrollbar-width: none;
+      }
+      .tab-bar::-webkit-scrollbar {
+        display: none;
+      }
+      .tab-btn {
+        background: transparent;
+        border: 0;
+        border-bottom: 3px solid transparent;
+        border-radius: 0;
+        color: #9da7b3;
+        font-size: 14px;
+        font-weight: 600;
+        margin: 0;
+        padding: 14px 18px 11px;
+        cursor: pointer;
+        white-space: nowrap;
+        flex-shrink: 0;
+        transition: color 0.15s, border-color 0.15s;
+      }
+      .tab-btn:hover {
+        color: #e6edf3;
+        background: #1c2128;
+      }
+      .tab-btn.active {
+        color: #e6edf3;
+        border-bottom-color: #388bfd;
+      }
+      .tab-btn .tab-check {
+        margin-left: 5px;
+        font-size: 13px;
+      }
+
+      .tab-panel {
+        display: none;
+        padding: 26px 22px 28px;
+      }
+      .tab-panel.active {
+        display: block;
+      }
+
+      /* ── Account stub ───────────────────────────────────── */
+      .account-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        background: #1c2128;
+        border: 1px solid #30363d;
+        border-radius: 10px;
+        padding: 14px 16px;
+        margin-bottom: 18px;
+      }
+      .account-avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: #388bfd;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 16px;
+        color: white;
+        flex-shrink: 0;
+      }
+      .account-label {
+        font-weight: 600;
+        font-size: 14px;
+      }
+      .account-sub {
+        font-size: 12px;
+        color: #9da7b3;
+      }
+      .account-badge {
+        margin-left: auto;
+        font-size: 11px;
+        font-weight: 700;
+        background: #173225;
+        color: #aff5bd;
+        border: 1px solid #347d4b;
+        border-radius: 20px;
+        padding: 3px 9px;
+      }
+      .add-account-btn {
+        background: #21262d;
+        border: 1px dashed #484f58;
+        border-radius: 10px;
+        color: #9da7b3;
+        font-size: 14px;
+        font-weight: 600;
+        padding: 11px 16px;
+        cursor: not-allowed;
+        margin-top: 0;
+        width: 100%;
+        text-align: left;
+        opacity: 0.6;
+      }
+
+      /* ── Stremio button ─────────────────────────────────── */
+      .stremio-btn {
+        display: inline-block;
+        margin-top: 18px;
+        padding: 11px 16px;
+        border-radius: 8px;
+        background: #8957e5;
+        color: white;
+        text-decoration: none;
+        font-weight: 700;
+        font-size: 15px;
+      }
+
+      /* ── Copy toast ─────────────────────────────────────── */
       #copy-toast {
         position: fixed;
         bottom: 28px;
@@ -218,216 +348,263 @@
       </p>
       <div id="message" class="notice hidden"></div>
 
-      <section id="config-card" class="card hidden">
-        <h2>1. Configure services</h2>
-        <p>
-          Values already configured by the environment or local config are
-          loaded automatically. Secret values stay on the server; leave their
-          fields blank to keep them unchanged.
-        </p>
-        <form id="config-form">
-          <label for="public-url">Public HTTPS URL</label>
-          <input
-            id="public-url"
-            type="url"
-            placeholder="https://stream.example.com"
-            required
-          />
-          <p class="muted">
-            This must point to this VPS and be reachable by Stremio. HTTPS is
-            required by most Stremio clients.
-          </p>
+      <!-- ── Tab shell ──────────────────────────────────────── -->
+      <div class="tab-shell">
+        <!-- Tab bar -->
+        <div class="tab-bar" role="tablist">
+          <button class="tab-btn" role="tab" data-tab="config" aria-selected="false">
+            ⚙️ Configuration<span class="tab-check hidden" id="check-config">✅</span>
+          </button>
+          <button class="tab-btn" role="tab" data-tab="telegram" aria-selected="false">
+            🔐 Telegram Auth<span class="tab-check hidden" id="check-telegram">✅</span>
+          </button>
+          <button class="tab-btn" role="tab" data-tab="sources" aria-selected="false">
+            📂 Sources<span class="tab-check hidden" id="check-sources">✅</span>
+          </button>
+          <button class="tab-btn" role="tab" data-tab="stremio" aria-selected="false">
+            📋 Addon
+          </button>
+          <button class="tab-btn" role="tab" data-tab="backup" aria-selected="false">
+            💾 Backup &amp; Restore
+          </button>
+        </div>
 
+        <!-- ── Panel 1: Configuration ──────────────────────── -->
+        <div id="panel-config" class="tab-panel" role="tabpanel">
+          <h2>Configuration</h2>
+          <p>
+            Values already configured by the environment or local config are
+            loaded automatically. Secret values stay on the server; leave their
+            fields blank to keep them unchanged.
+          </p>
+          <form id="config-form">
+            <label for="public-url">Public HTTPS URL</label>
+            <input
+              id="public-url"
+              type="url"
+              placeholder="https://stream.example.com"
+              required
+            />
+            <p class="muted">
+              This must point to this VPS and be reachable by Stremio. HTTPS is
+              required by most Stremio clients.
+            </p>
+
+            <div class="grid">
+              <div>
+                <label for="api-id">Telegram API ID</label>
+                <input id="api-id" type="string" min="1" placeholder="123456" />
+              </div>
+              <div>
+                <label for="api-hash">Telegram API hash</label>
+                <input
+                  id="api-hash"
+                  type="password"
+                  autocomplete="off"
+                  placeholder="from my.telegram.org"
+                />
+                <div id="api-hash-status" class="muted"></div>
+              </div>
+            </div>
+            <p class="muted">
+              Create Telegram credentials at
+              <a href="https://my.telegram.org" target="_blank" rel="noreferrer"
+                >my.telegram.org</a
+              >.
+            </p>
+
+            <label for="tmdb-token">TMDB Read Access Token</label>
+            <input
+              id="tmdb-token"
+              type="password"
+              autocomplete="off"
+              placeholder="eyJ..."
+            />
+            <div id="tmdb-status" class="muted"></div>
+            <p class="muted">
+              Create or copy the v4 token at
+              <a
+                href="https://www.themoviedb.org/settings/api"
+                target="_blank"
+                rel="noreferrer"
+                >TMDB API settings</a
+              >.
+            </p>
+
+            <label for="language">Preferred language</label>
+            <select id="language">
+              <option value="en">English</option>
+              <option value="he">עברית</option>
+              <option value="ru">Русский</option>
+              <option value="ar">العربية</option>
+            </select>
+            <button>Save configuration</button>
+          </form>
+          <div id="config-status" class="status"></div>
+        </div>
+
+        <!-- ── Panel 2: Telegram Auth ──────────────────────── -->
+        <div id="panel-telegram" class="tab-panel" role="tabpanel">
+          <h2>Telegram Auth</h2>
+
+          <!-- Multi-account stub -->
+          <div id="account-stub-connected" class="hidden">
+            <div class="account-row">
+              <div class="account-avatar">1</div>
+              <div>
+                <div class="account-label">Account 1</div>
+                <div id="account-sub" class="account-sub">Connected</div>
+              </div>
+              <span class="account-badge">Active</span>
+            </div>
+          </div>
+
+          <button
+            class="add-account-btn"
+            disabled
+            title="Multi-account support is coming in a future release"
+          >
+            ＋ Add account <span style="font-size: 11px; opacity: 0.7">(coming soon)</span>
+          </button>
+
+          <hr style="border-color: #30363d; margin: 22px 0 18px" />
+
+          <p>
+            Use QR login from the Telegram mobile app, or use the phone-code
+            method if QR is unavailable. TG2Stream stores only the resulting
+            session on this VPS.
+          </p>
+          <div id="telegram-connected" class="notice success hidden">
+            Telegram is connected.
+          </div>
+          <div id="qr-area">
+            <button id="qr-button">Generate Telegram QR code</button>
+            <img id="qr-image" class="hidden" alt="Telegram login QR code" />
+            <div id="qr-status" class="status"></div>
+          </div>
+          <div class="row">
+            <button id="phone-toggle" class="secondary">
+              Use phone code instead
+            </button>
+          </div>
+          <form id="phone-form" class="hidden">
+            <label for="phone">Telegram phone number</label>
+            <input
+              id="phone"
+              type="tel"
+              placeholder="+15551234567"
+              autocomplete="tel"
+            />
+            <button>Send code</button>
+          </form>
+          <form id="code-form" class="hidden">
+            <label for="code">Telegram code</label>
+            <input id="code" inputmode="numeric" autocomplete="one-time-code" />
+            <label for="password">Telegram 2FA password (if enabled)</label>
+            <input
+              id="password"
+              type="password"
+              autocomplete="current-password"
+            />
+            <button>Verify Telegram code</button>
+          </form>
+          <div id="auth-status" class="status"></div>
+        </div>
+
+        <!-- ── Panel 3: Sources ────────────────────────────── -->
+        <div id="panel-sources" class="tab-panel" role="tabpanel">
+          <h2>Sources <span class="muted" style="font-size: 14px; font-weight: 400">(optional)</span></h2>
+          <p>
+            Sources are the Telegram folders and channels TG2Stream exposes
+            through the addon. Only selected sources will be available as
+            Stremio catalog — pick the ones that contain the media you want to stream.
+          </p>
+          <button id="load-sources" type="button">
+            Load folders and channels
+          </button>
+          <div id="load-sources-status" class="status"></div>
           <div class="grid">
             <div>
-              <label for="api-id">Telegram API ID</label>
-              <input id="api-id" type="string" min="1" placeholder="123456" />
+              <h3>Folders</h3>
+              <div id="folders" class="check-list">
+                <p class="muted" style="padding: 12px">Not loaded yet.</p>
+              </div>
             </div>
             <div>
-              <label for="api-hash">Telegram API hash</label>
+              <h3>Channels</h3>
               <input
-                id="api-hash"
-                type="password"
-                autocomplete="off"
-                placeholder="from my.telegram.org"
+                id="channel-search"
+                class="hidden"
+                type="search"
+                placeholder="Search channels by title or username"
               />
-              <div id="api-hash-status" class="muted"></div>
+              <div id="channels" class="check-list">
+                <p class="muted" style="padding: 12px">Not loaded yet.</p>
+              </div>
             </div>
           </div>
-          <p class="muted">
-            Create Telegram credentials at
-            <a href="https://my.telegram.org" target="_blank" rel="noreferrer"
-              >my.telegram.org</a
-            >.
+          <button id="save-sources">Save selected sources</button>
+          <div id="source-status" class="status"></div>
+        </div>
+
+        <!-- ── Panel 4: Stremio ────────────────────────────── -->
+        <div id="panel-stremio" class="tab-panel" role="tabpanel">
+          <h2>Ready for Stremio</h2>
+          <p>
+            Install this addon in Stremio using the manifest URL below. It
+            contains no user token because this VPS has one private instance.
           </p>
-
-          <label for="tmdb-token">TMDB Read Access Token</label>
-          <input
-            id="tmdb-token"
-            type="password"
-            autocomplete="off"
-            placeholder="eyJ..."
-          />
-          <div id="tmdb-status" class="muted"></div>
-          <p class="muted">
-            Create or copy the v4 token at
-            <a
-              href="https://www.themoviedb.org/settings/api"
-              target="_blank"
-              rel="noreferrer"
-              >TMDB API settings</a
-            >.
-          </p>
-
-          <label for="language">Preferred language</label>
-          <select id="language">
-            <option value="en">English</option>
-            <option value="he">עברית</option>
-            <option value="ru">Русский</option>
-            <option value="ar">العربية</option>
-          </select>
-          <button>Save configuration</button>
-        </form>
-        <div id="config-status" class="status"></div>
-      </section>
-
-      <section id="telegram-card" class="card hidden">
-        <h2>2. Connect Telegram</h2>
-        <p>
-          Use QR login from the Telegram mobile app, or use the phone-code
-          method if QR is unavailable. TG2Stream stores only the resulting
-          session on this VPS.
-        </p>
-        <div id="telegram-connected" class="notice success hidden">
-          Telegram is connected.
-        </div>
-        <div id="qr-area">
-          <button id="qr-button">Generate Telegram QR code</button>
-          <img id="qr-image" class="hidden" alt="Telegram login QR code" />
-          <div id="qr-status" class="status"></div>
-        </div>
-        <div class="row">
-          <button id="phone-toggle" class="secondary">
-            Use phone code instead
-          </button>
-        </div>
-        <form id="phone-form" class="hidden">
-          <label for="phone">Telegram phone number</label>
-          <input
-            id="phone"
-            type="tel"
-            placeholder="+15551234567"
-            autocomplete="tel"
-          />
-          <button>Send code</button>
-        </form>
-        <form id="code-form" class="hidden">
-          <label for="code">Telegram code</label>
-          <input id="code" inputmode="numeric" autocomplete="one-time-code" />
-          <label for="password">Telegram 2FA password (if enabled)</label>
-          <input
-            id="password"
-            type="password"
-            autocomplete="current-password"
-          />
-          <button>Verify Telegram code</button>
-        </form>
-        <div id="auth-status" class="status"></div>
-      </section>
-
-      <section id="selection-card" class="card hidden">
-        <h2>3. Choose sources</h2>
-        <p>
-          Load the Telegram sources when you are ready, then select which
-          folders and channels TG2Stream should search.
-        </p>
-        <button id="load-sources" type="button">
-          Load folders and channels
-        </button>
-        <div id="load-sources-status" class="status"></div>
-        <div class="grid">
-          <div>
-            <h3>Folders</h3>
-            <div id="folders" class="check-list">
-              <p class="muted" style="padding: 12px">Not loaded yet.</p>
+          <div id="stremio-not-ready" class="notice warning hidden">
+            ⚠️ Complete the <strong>Configuration</strong> and
+            <strong>Telegram Auth</strong> tabs first to generate your manifest
+            URL.
+          </div>
+          <div id="stremio-ready-content" class="hidden">
+            <label style="margin-top: 0">Manifest URL</label>
+            <div id="manifest-url" class="copy-box"></div>
+            <div class="row">
+              <button id="copy-manifest">Copy manifest URL</button>
+              <a id="open-stremio" class="stremio-btn" href="#">Open in Stremio</a>
             </div>
           </div>
-          <div>
-            <h3>Channels</h3>
+          <p class="muted" style="margin-top: 18px">
+            You can return to this page later to refresh Telegram
+            folders/channels or update settings.
+          </p>
+        </div>
+
+        <!-- ── Panel 5: Backup & Restore ──────────────────── -->
+        <div id="panel-backup" class="tab-panel" role="tabpanel">
+          <h2>Backup &amp; Restore</h2>
+          <p>
+            Export your full configuration (including API keys and session) as a
+            JSON file, or import a previously exported file to restore this
+            instance.
+          </p>
+          <div class="notice info" style="margin-top: 0">
+            &#x26A0;&#xFE0F; The export file contains sensitive secrets. Keep it
+            private and protect this page at the network/proxy level.
+          </div>
+          <div class="row">
+            <button id="export-config">Export config.json</button>
+            <button id="import-trigger" class="secondary">
+              Import config.json
+            </button>
             <input
-              id="channel-search"
+              id="import-file"
+              type="file"
+              accept=".json,application/json"
               class="hidden"
-              type="search"
-              placeholder="Search channels by title or username"
             />
-            <div id="channels" class="check-list">
-              <p class="muted" style="padding: 12px">Not loaded yet.</p>
-            </div>
           </div>
+          <div id="backup-status" class="status"></div>
         </div>
-        <button id="save-sources">Save selected sources</button>
-        <div id="source-status" class="status"></div>
-      </section>
-
-      <section id="done-card" class="card hidden">
-        <h2>Ready for Stremio</h2>
-        <p>
-          Install this addon in Stremio using the manifest URL below. It
-          contains no user token because this VPS has one private instance.
-        </p>
-        <div id="manifest-url" class="copy-box"></div>
-        <div class="row">
-          <button id="copy-manifest">Copy manifest URL</button>
-          <a
-            id="open-stremio"
-            class="button"
-            style="
-              display: inline-block;
-              margin-top: 18px;
-              padding: 11px 16px;
-              border-radius: 8px;
-              background: #8957e5;
-              color: white;
-              text-decoration: none;
-              font-weight: 700;
-            "
-            href="#"
-            >Open in Stremio</a
-          >
-        </div>
-        <p class="muted">
-          You can return to this page later to refresh Telegram folders/channels
-          or update settings.
-        </p>
-      </section>
-
-      <section class="card">
-        <h2>Backup &amp; Restore</h2>
-        <p>
-          Export your full configuration (including API keys and session) as a
-          JSON file, or import a previously exported file to restore this
-          instance.
-        </p>
-        <div class="notice info" style="margin-top: 0">
-          &#x26A0;&#xFE0F; The export file contains sensitive secrets. Keep it
-          private and protect this page at the network/proxy level.
-        </div>
-        <div class="row">
-          <button id="export-config">Export config.json</button>
-          <button id="import-trigger" class="secondary">
-            Import config.json
-          </button>
-          <input
-            id="import-file"
-            type="file"
-            accept=".json,application/json"
-            class="hidden"
-          />
-        </div>
-        <div id="backup-status" class="status"></div>
-      </section>
+      </div>
+      <!-- /.tab-shell -->
     </main>
+
     <div id="copy-toast">✓ Manifest URL copied to clipboard</div>
+
     <script>
       const $ = (id) => document.getElementById(id);
       let setupStatus = null;
@@ -441,6 +618,7 @@
       const selectedFolderIds = new Set();
       const selectedChannelIds = new Set();
 
+      // ── Utilities ───────────────────────────────────────────────────────────
       function showMessage(text, kind = "info") {
         const node = $("message");
         node.textContent = text;
@@ -481,13 +659,43 @@
         empty.textContent = text;
         $(containerId).replaceChildren(empty);
       }
-      function renderChecks(
-        containerId,
-        items,
-        selectedIds,
-        label,
-        formatLabel,
-      ) {
+
+      // ── Tabs ────────────────────────────────────────────────────────────────
+      const TAB_ORDER = ["config", "telegram", "sources", "stremio", "backup"];
+
+      function activateTab(name) {
+        TAB_ORDER.forEach((t) => {
+          const btn = document.querySelector(`.tab-btn[data-tab="${t}"]`);
+          const panel = $(`panel-${t}`);
+          const isActive = t === name;
+          btn.classList.toggle("active", isActive);
+          btn.setAttribute("aria-selected", String(isActive));
+          panel.classList.toggle("active", isActive);
+        });
+      }
+
+      document.querySelectorAll(".tab-btn").forEach((btn) => {
+        btn.addEventListener("click", () => activateTab(btn.dataset.tab));
+      });
+
+      function setTabDone(name, done) {
+        const checkEl = $(`check-${name}`);
+        if (checkEl) checkEl.classList.toggle("hidden", !done);
+        const btn = document.querySelector(`.tab-btn[data-tab="${name}"]`);
+        if (btn) btn.setAttribute("aria-done", String(done));
+      }
+
+      /** Pick the best default tab based on current status */
+      function resolveDefaultTab(status) {
+        const configDone = status?.setupComplete === true;
+        const telegramDone = status?.telegramAuthenticated === true;
+        if (!configDone) return "config";
+        if (!telegramDone) return "telegram";
+        return "stremio"; // both required steps done → show Stremio
+      }
+
+      // ── Source rendering ─────────────────────────────────────────────────────
+      function renderChecks(containerId, items, selectedIds, label, formatLabel) {
         const container = $(containerId);
         container.replaceChildren();
         if (!items.length) {
@@ -547,15 +755,47 @@
               : channel.title || String(channel.id),
         );
       }
+      function mergeSourceSelection(items, selectedIds, wasLoaded) {
+        if (!wasLoaded) {
+          selectedIds.clear();
+          for (const item of items)
+            if (item.isSelected) selectedIds.add(String(item.id));
+        }
+      }
+
+      // ── Manifest / Stremio panel ─────────────────────────────────────────────
       function manifestUrl() {
         const base = (setupStatus?.publicUrl || location.origin).replace(/\/$/, "");
         return `${base}/manifest.json`;
       }
-      function refreshDone() {
-        const url = manifestUrl();
-        $("manifest-url").textContent = url;
-        $("open-stremio").href = `stremio://${url.replace(/^https?:\/\//, "")}`;
-        show("done-card");
+      function refreshStremioPanel() {
+        const ready =
+          setupStatus?.setupComplete && setupStatus?.telegramAuthenticated;
+        show("stremio-not-ready", !ready);
+        show("stremio-ready-content", !!ready);
+        if (ready) {
+          const url = manifestUrl();
+          $("manifest-url").textContent = url;
+          $("open-stremio").href = `stremio://${url.replace(/^https?:\/\//, "")}`;
+        }
+      }
+
+      // ── Telegram helpers ─────────────────────────────────────────────────────
+      function phoneLast4(p) {
+        const digits = String(p || "").replace(/\D/g, "");
+        return digits.length >= 4 ? digits.slice(-4) : null;
+      }
+      function showTelegramConnected(p) {
+        const suffix = phoneLast4(p) || setupStatus?.telegramPhoneLast4;
+        const sub = suffix ? `Connected · ···${suffix}` : "Connected";
+        // Update account stub
+        $("account-sub").textContent = sub;
+        show("account-stub-connected");
+        // Legacy notice (kept for in-panel confirmation)
+        $("telegram-connected").textContent = suffix
+          ? `Telegram is connected (phone ending in ${suffix}).`
+          : "Telegram is connected.";
+        show("telegram-connected");
       }
       function updateSecretPlaceholders() {
         $("api-hash").placeholder =
@@ -564,36 +804,30 @@
         $("api-hash-status").textContent = "";
         $("tmdb-status").textContent = "";
       }
-      function mergeSourceSelection(items, selectedIds, wasLoaded) {
-        if (!wasLoaded) {
-          selectedIds.clear();
-          for (const item of items)
-            if (item.isSelected) selectedIds.add(String(item.id));
-        }
-      }
-      function phoneLast4(phone) {
-        const digits = String(phone || "").replace(/\D/g, "");
-        return digits.length >= 4 ? digits.slice(-4) : null;
-      }
-      function showTelegramConnected(phone) {
-        const suffix = phoneLast4(phone) || setupStatus?.telegramPhoneLast4;
-        $("telegram-connected").textContent = suffix
-          ? `Telegram is connected (phone ending in ${suffix}).`
-          : "Telegram is connected.";
-        show("telegram-connected");
-      }
 
+      // ── Load status ──────────────────────────────────────────────────────────
       async function loadStatus() {
         setupStatus = await api("/setup/status", { headers: {} });
         clearMessage();
-        show("config-card");
-        show("telegram-card");
+
         $("public-url").value = setupStatus.publicUrl || location.origin;
         $("api-id").value = setupStatus.apiId || "";
         $("language").value = setupStatus.preferredLanguage || "en";
         updateSecretPlaceholders();
-        if (setupStatus.telegramAuthenticated) await onTelegramConnected();
+
+        // Mark tabs done
+        setTabDone("config", !!setupStatus.setupComplete);
+        setTabDone("telegram", !!setupStatus.telegramAuthenticated);
+
+        if (setupStatus.telegramAuthenticated) {
+          await onTelegramConnected();
+        }
+
+        refreshStremioPanel();
+        activateTab(resolveDefaultTab(setupStatus));
       }
+
+      // ── Config form ──────────────────────────────────────────────────────────
       async function saveConfig(event) {
         event.preventDefault();
         const button = event.submitter;
@@ -615,19 +849,32 @@
             : `Still missing: ${data.missing.join(", ")}`;
           showMessage("Configuration saved.", "success");
           await loadStatus();
+          // Auto-advance to Telegram Auth tab
+          if (data.setupComplete) activateTab("telegram");
         } catch (error) {
           showMessage(error.message, "error");
         } finally {
           setBusy(button, false);
         }
       }
-      async function onTelegramConnected(phone) {
-        showTelegramConnected(phone);
-        show("selection-card");
+
+      // ── Telegram connected callback ──────────────────────────────────────────
+      async function onTelegramConnected(p) {
+        showTelegramConnected(p);
         $("auth-status").textContent =
           "Telegram authentication completed. Load sources when ready.";
-        refreshDone();
+        setTabDone("telegram", true);
+
+        // Reload full status to get updated flags
+        if (p) {
+          setupStatus = await api("/setup/status", { headers: {} }).catch(() => setupStatus);
+        }
+        refreshStremioPanel();
+        // Auto-advance to Stremio tab after connecting
+        if (p) activateTab("stremio");
       }
+
+      // ── QR auth ─────────────────────────────────────────────────────────────
       async function generateQr() {
         const button = $("qr-button");
         setBusy(button, true);
@@ -670,6 +917,8 @@
           showMessage(error.message, "error");
         }
       }
+
+      // ── Phone auth ───────────────────────────────────────────────────────────
       async function sendCode(event) {
         event.preventDefault();
         const button = event.submitter;
@@ -713,6 +962,8 @@
           setBusy(button, false);
         }
       }
+
+      // ── Sources ──────────────────────────────────────────────────────────────
       async function loadSources() {
         const button = $("load-sources");
         setBusy(button, true);
@@ -740,11 +991,7 @@
           results[1].value.success !== false
         ) {
           const nextChannels = results[1].value.channels || [];
-          mergeSourceSelection(
-            nextChannels,
-            selectedChannelIds,
-            channelsLoaded,
-          );
+          mergeSourceSelection(nextChannels, selectedChannelIds, channelsLoaded);
           channels = nextChannels;
           channelsLoaded = true;
           show("channel-search", true);
@@ -764,6 +1011,7 @@
           showMessage(`Could not load ${errors.join(" and ")}.`, "error");
         setBusy(button, false);
       }
+
       async function saveSources() {
         const button = $("save-sources");
         setBusy(button, true);
@@ -799,11 +1047,9 @@
               `${failures} source selection request${failures === 1 ? "" : "s"} failed.`,
             );
           $("source-status").textContent = "Sources saved.";
-          showMessage(
-            "Setup complete. Install the addon in Stremio.",
-            "success",
-          );
-          refreshDone();
+          setTabDone("sources", true);
+          showMessage("Sources saved. Addon is ready in Stremio.", "success");
+          refreshStremioPanel();
         } catch (error) {
           showMessage(error.message, "error");
         } finally {
@@ -811,42 +1057,7 @@
         }
       }
 
-      $("config-form").addEventListener("submit", saveConfig);
-      $("qr-button").addEventListener("click", generateQr);
-      $("phone-toggle").addEventListener("click", () => show("phone-form"));
-      $("phone-form").addEventListener("submit", sendCode);
-      $("code-form").addEventListener("submit", verifyCode);
-      $("load-sources").addEventListener("click", loadSources);
-      $("channel-search").addEventListener("input", renderChannels);
-      $("save-sources").addEventListener("click", saveSources);
-      $("copy-manifest").addEventListener("click", async () => {
-        const btn = $("copy-manifest");
-        try {
-          await navigator.clipboard.writeText($("manifest-url").textContent);
-        } catch {
-          showMessage("Could not copy — please copy the URL manually.", "error");
-          return;
-        }
-
-        // ── Button feedback ──────────────────────────────────
-        const originalText = btn.textContent;
-        const originalBg = btn.style.background;
-        btn.textContent = "✓ Copied!";
-        btn.style.background = "#2ea043";
-        btn.disabled = true;
-        setTimeout(() => {
-          btn.textContent = originalText;
-          btn.style.background = originalBg;
-          btn.disabled = false;
-        }, 2000);
-
-        // ── Toast feedback ───────────────────────────────────
-        const toast = $("copy-toast");
-        toast.classList.add("show");
-        setTimeout(() => toast.classList.remove("show"), 2500);
-      });
-
-      // ── Backup & Restore ──────────────────────────────────────────────────
+      // ── Backup & Restore ─────────────────────────────────────────────────────
       $("export-config").addEventListener("click", async () => {
         const button = $("export-config");
         setBusy(button, true);
@@ -904,12 +1115,45 @@
           showMessage(error.message, "error");
         } finally {
           setBusy(button, false);
-          // Reset so re-selecting the same file fires change again
           $("import-file").value = "";
         }
       });
-      // ─────────────────────────────────────────────────────────────────────
 
+      // ── Copy manifest ────────────────────────────────────────────────────────
+      $("copy-manifest").addEventListener("click", async () => {
+        const btn = $("copy-manifest");
+        try {
+          await navigator.clipboard.writeText($("manifest-url").textContent);
+        } catch {
+          showMessage("Could not copy — please copy the URL manually.", "error");
+          return;
+        }
+        const originalText = btn.textContent;
+        const originalBg = btn.style.background;
+        btn.textContent = "✓ Copied!";
+        btn.style.background = "#2ea043";
+        btn.disabled = true;
+        setTimeout(() => {
+          btn.textContent = originalText;
+          btn.style.background = originalBg;
+          btn.disabled = false;
+        }, 2000);
+        const toast = $("copy-toast");
+        toast.classList.add("show");
+        setTimeout(() => toast.classList.remove("show"), 2500);
+      });
+
+      // ── Wire up forms ────────────────────────────────────────────────────────
+      $("config-form").addEventListener("submit", saveConfig);
+      $("qr-button").addEventListener("click", generateQr);
+      $("phone-toggle").addEventListener("click", () => show("phone-form"));
+      $("phone-form").addEventListener("submit", sendCode);
+      $("code-form").addEventListener("submit", verifyCode);
+      $("load-sources").addEventListener("click", loadSources);
+      $("channel-search").addEventListener("input", renderChannels);
+      $("save-sources").addEventListener("click", saveSources);
+
+      // ── Boot ─────────────────────────────────────────────────────────────────
       loadStatus().catch((error) => showMessage(error.message, "error"));
     </script>
   </body>
