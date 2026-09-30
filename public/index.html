@@ -184,6 +184,29 @@
         color: #9da7b3;
         margin-top: 12px;
       }
+      /* ── Copy toast ────────────────────────────────────── */
+      #copy-toast {
+        position: fixed;
+        bottom: 28px;
+        right: 24px;
+        background: #173225;
+        border: 1px solid #347d4b;
+        color: #aff5bd;
+        padding: 12px 18px;
+        border-radius: 10px;
+        font-size: 14px;
+        font-weight: 600;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+        opacity: 0;
+        transform: translateY(10px);
+        transition: opacity 0.2s ease, transform 0.2s ease;
+        pointer-events: none;
+        z-index: 999;
+      }
+      #copy-toast.show {
+        opacity: 1;
+        transform: translateY(0);
+      }
     </style>
   </head>
   <body>
@@ -404,6 +427,7 @@
         <div id="backup-status" class="status"></div>
       </section>
     </main>
+    <div id="copy-toast">✓ Manifest URL copied to clipboard</div>
     <script>
       const $ = (id) => document.getElementById(id);
       let setupStatus = null;
@@ -796,8 +820,30 @@
       $("channel-search").addEventListener("input", renderChannels);
       $("save-sources").addEventListener("click", saveSources);
       $("copy-manifest").addEventListener("click", async () => {
-        await navigator.clipboard.writeText($("manifest-url").textContent);
-        showMessage("Manifest URL copied.", "success");
+        const btn = $("copy-manifest");
+        try {
+          await navigator.clipboard.writeText($("manifest-url").textContent);
+        } catch {
+          showMessage("Could not copy — please copy the URL manually.", "error");
+          return;
+        }
+
+        // ── Button feedback ──────────────────────────────────
+        const originalText = btn.textContent;
+        const originalBg = btn.style.background;
+        btn.textContent = "✓ Copied!";
+        btn.style.background = "#2ea043";
+        btn.disabled = true;
+        setTimeout(() => {
+          btn.textContent = originalText;
+          btn.style.background = originalBg;
+          btn.disabled = false;
+        }, 2000);
+
+        // ── Toast feedback ───────────────────────────────────
+        const toast = $("copy-toast");
+        toast.classList.add("show");
+        setTimeout(() => toast.classList.remove("show"), 2500);
       });
 
       // ── Backup & Restore ──────────────────────────────────────────────────
