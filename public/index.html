@@ -104,7 +104,7 @@
       button {
         border: 0;
         border-radius: 8px;
-        background: #2aabee;
+        background: #1c94d2;
         color: white;
         font-weight: 700;
         font-size: 15px;
@@ -353,12 +353,49 @@
         opacity: 1;
         transform: translateY(0);
       }
+
+      /* ── UI Language ────────────────────────────────────── */
+      .lang-switch {
+        position: absolute;
+        top: 24px;
+        right: 18px;
+      }
+      .lang-switch select {
+        width: auto;
+        padding: 6px 10px;
+        font-size: 13px;
+        border-radius: 8px;
+      }
+      body.rtl {
+        direction: rtl;
+        text-align: right;
+      }
+      body.rtl .tab-btn .tab-check,
+      body.rtl .tab-btn .tab-warn {
+        margin-left: 0;
+        margin-right: 5px;
+      }
+      body.rtl .account-badge {
+        margin-left: 0;
+        margin-right: auto;
+      }
+      body.rtl .copy-box {
+        text-align: left; /* Keep URLs LTR even in RTL mode */
+        direction: ltr;
+      }
     </style>
   </head>
   <body>
     <main>
+      <div class="lang-switch">
+        <select id="ui-lang" aria-label="Dashboard language">
+          <option value="en">English</option>
+          <option value="he">עברית</option>
+        </select>
+      </div>
+
       <img src="/logo.png" alt="TG2Stream" class="site-logo" />
-      <p class="muted">
+      <p class="muted" data-i18n="descMain">
         Private, single-instance setup for your VPS. Your Telegram session and
         API keys stay on this server.
       </p>
@@ -369,50 +406,50 @@
         <!-- Tab bar -->
         <div class="tab-bar" role="tablist">
           <button class="tab-btn" role="tab" data-tab="config" aria-selected="false">
-            ⚙️ Configuration<span class="tab-check hidden" id="check-config">✅</span><span class="tab-warn hidden" id="warn-config">!</span>
+            <span data-i18n="tabConfig">⚙️ Configuration</span><span class="tab-check hidden" id="check-config">✅</span><span class="tab-warn hidden" id="warn-config">!</span>
           </button>
           <button class="tab-btn" role="tab" data-tab="telegram" aria-selected="false">
-            🔐 Telegram Auth<span class="tab-check hidden" id="check-telegram">✅</span><span class="tab-warn hidden" id="warn-telegram">!</span>
+            <span data-i18n="tabTelegram">🔐 Telegram Auth</span><span class="tab-check hidden" id="check-telegram">✅</span><span class="tab-warn hidden" id="warn-telegram">!</span>
           </button>
           <button class="tab-btn" role="tab" data-tab="sources" aria-selected="false">
-            📂 Sources<span class="tab-check hidden" id="check-sources">✅</span>
+            <span data-i18n="tabSources">📂 Sources</span><span class="tab-check hidden" id="check-sources">✅</span>
           </button>
           <button class="tab-btn" role="tab" data-tab="stremio" aria-selected="false">
-            📋 Addon
+            <span data-i18n="tabAddon">📋 Addon</span>
           </button>
           <button class="tab-btn" role="tab" data-tab="backup" aria-selected="false">
-            💾 Backup &amp; Restore
+            <span data-i18n="tabBackup">💾 Backup &amp; Restore</span>
           </button>
         </div>
 
         <!-- ── Panel 1: Configuration ──────────────────────── -->
         <div id="panel-config" class="tab-panel" role="tabpanel">
-          <h2>Configuration</h2>
-          <p>
+          <h2 data-i18n="headConfig">Configuration</h2>
+          <p data-i18n="descConfig">
             Values already configured by the environment or local config are
             loaded automatically. Secret values stay on the server; leave their
             fields blank to keep them unchanged.
           </p>
           <form id="config-form">
-            <label for="public-url">Public HTTPS URL</label>
+            <label for="public-url" data-i18n="labelPublicUrl">Public HTTPS URL</label>
             <input
               id="public-url"
               type="url"
               placeholder="https://stream.example.com"
               required
             />
-            <p class="muted">
+            <p class="muted" data-i18n="descPublicUrl">
               This must point to this VPS and be reachable by Stremio. HTTPS is
               required by most Stremio clients.
             </p>
 
             <div class="grid">
               <div>
-                <label for="api-id">Telegram API ID</label>
+                <label for="api-id" data-i18n="labelApiId">Telegram API ID</label>
                 <input id="api-id" type="string" min="1" placeholder="123456" />
               </div>
               <div>
-                <label for="api-hash">Telegram API hash</label>
+                <label for="api-hash" data-i18n="labelApiHash">Telegram API hash</label>
                 <input
                   id="api-hash"
                   type="password"
@@ -423,13 +460,13 @@
               </div>
             </div>
             <p class="muted">
-              Create Telegram credentials at
+              <span data-i18n="descApiCreds">Create Telegram credentials at</span>
               <a href="https://my.telegram.org" target="_blank" rel="noreferrer"
                 >my.telegram.org</a
               >.
             </p>
 
-            <label for="tmdb-token">TMDB Read Access Token</label>
+            <label for="tmdb-token" data-i18n="labelTmdbToken">TMDB Read Access Token</label>
             <input
               id="tmdb-token"
               type="password"
@@ -438,7 +475,7 @@
             />
             <div id="tmdb-status" class="muted"></div>
             <p class="muted">
-              Create or copy the v4 token at
+              <span data-i18n="descTmdbCreds">Create or copy the v4 token at</span>
               <a
                 href="https://www.themoviedb.org/settings/api"
                 target="_blank"
@@ -447,133 +484,132 @@
               >.
             </p>
 
-            <label for="language">Preferred language</label>
+            <label for="language" data-i18n="labelLanguage">Preferred language</label>
             <select id="language">
               <option value="en">English</option>
               <option value="he">עברית</option>
               <option value="ru">Русский</option>
               <option value="ar">العربية</option>
             </select>
-            <button>Save configuration</button>
+            <button data-i18n="btnSaveConfig">Save configuration</button>
           </form>
           <div id="config-status" class="status"></div>
         </div>
 
         <!-- ── Panel 2: Telegram Auth ──────────────────────── -->
         <div id="panel-telegram" class="tab-panel" role="tabpanel">
-          <h2>Telegram Auth</h2>
+          <h2 data-i18n="headTelegram">Telegram Auth</h2>
 
           <!-- Multi-account stub -->
           <div id="account-stub-connected" class="hidden">
             <div class="account-row">
               <div class="account-avatar">1</div>
               <div>
-                <div class="account-label">Account 1</div>
-                <div id="account-sub" class="account-sub">Connected</div>
+                <div class="account-label" data-i18n="accountLabel">Account 1</div>
+                <div id="account-sub" class="account-sub" data-i18n="accountSubConnected">Connected</div>
               </div>
-              <span class="account-badge">Active</span>
+              <span class="account-badge" data-i18n="accountBadgeActive">Active</span>
             </div>
           </div>
 
           <hr style="border-color: #30363d; margin: 22px 0 18px" />
 
-          <p>
+          <p data-i18n="descTelegram">
             Use QR login from the Telegram mobile app, or use the phone-code
             method if QR is unavailable. TG2Stream stores only the resulting
             session on this VPS.
           </p>
 
+          <div class="row">
+            <button id="qr-button" data-i18n="btnGenQr">Generate Telegram QR code</button>
+            <button id="phone-toggle" class="secondary" data-i18n="btnPhoneToggle">Auth by code</button>
+          </div>
           <div id="qr-area">
-            <button id="qr-button">Generate Telegram QR code</button>
             <img id="qr-image" class="hidden" alt="Telegram login QR code" />
             <div id="qr-status" class="status"></div>
           </div>
-          <div class="row">
-            <button id="phone-toggle" class="secondary">
-              Use phone code instead
-            </button>
-          </div>
           <form id="phone-form" class="hidden">
-            <label for="phone">Telegram phone number</label>
+            <label for="phone" data-i18n="labelPhone">Telegram phone number</label>
             <input
               id="phone"
               type="tel"
               placeholder="+15551234567"
               autocomplete="tel"
             />
-            <button>Send code</button>
+            <button data-i18n="btnSendCode">Send code</button>
           </form>
           <form id="code-form" class="hidden">
-            <label for="code">Telegram code</label>
+            <label for="code" data-i18n="labelCode">Telegram code</label>
             <input id="code" inputmode="numeric" autocomplete="one-time-code" />
-            <label for="password">Telegram 2FA password (if enabled)</label>
+            <label for="password" data-i18n="labelPassword">Telegram 2FA password (if enabled)</label>
             <input
               id="password"
               type="password"
               autocomplete="current-password"
             />
-            <button>Verify Telegram code</button>
+            <button data-i18n="btnVerifyCode">Verify Telegram code</button>
           </form>
           <div id="auth-status" class="status"></div>
         </div>
 
         <!-- ── Panel 3: Sources ────────────────────────────── -->
         <div id="panel-sources" class="tab-panel" role="tabpanel">
-          <h2>Sources <span class="muted" style="font-size: 14px; font-weight: 400">(optional)</span></h2>
-          <p>
+          <h2><span data-i18n="headSources">Sources</span> <span class="muted" style="font-size: 14px; font-weight: 400" data-i18n="optional">(optional)</span></h2>
+          <p data-i18n="descSources">
             Sources are the Telegram folders and channels TG2Stream exposes
             through the addon. Only selected sources will be available as
             Stremio catalog — pick the ones that contain the media you want to stream.
           </p>
-          <button id="load-sources" type="button">
+          <button id="load-sources" type="button" data-i18n="btnLoadSources">
             Load folders and channels
           </button>
           <div id="load-sources-status" class="status"></div>
           <div class="grid">
             <div>
-              <h3>Folders</h3>
+              <h3 data-i18n="headFolders">Folders</h3>
               <div id="folders" class="check-list">
-                <p class="muted" style="padding: 12px">Not loaded yet.</p>
+                <p class="muted" style="padding: 12px" data-i18n="notLoadedYet">Not loaded yet.</p>
               </div>
             </div>
             <div>
-              <h3>Channels</h3>
+              <h3 data-i18n="headChannels">Channels</h3>
               <input
                 id="channel-search"
                 class="hidden"
                 type="search"
                 placeholder="Search channels by title or username"
+                data-i18n-placeholder="searchChannelsPlaceholder"
               />
               <div id="channels" class="check-list">
-                <p class="muted" style="padding: 12px">Not loaded yet.</p>
+                <p class="muted" style="padding: 12px" data-i18n="notLoadedYet">Not loaded yet.</p>
               </div>
             </div>
           </div>
-          <button id="save-sources">Save selected sources</button>
+          <button id="save-sources" data-i18n="btnSaveSources">Save selected sources</button>
           <div id="source-status" class="status"></div>
         </div>
 
         <!-- ── Panel 4: Stremio ────────────────────────────── -->
         <div id="panel-stremio" class="tab-panel" role="tabpanel">
-          <h2>Ready for Stremio</h2>
-          <p>
+          <h2 data-i18n="headAddon">Ready for Stremio</h2>
+          <p data-i18n="descAddon">
             Install this addon in Stremio using the manifest URL below. It
             contains no user token because this VPS has one private instance.
           </p>
-          <div id="stremio-not-ready" class="notice warning hidden">
+          <div id="stremio-not-ready" class="notice warning hidden" data-i18n="notReadyMsg">
             ⚠️ Complete the <strong>Configuration</strong> and
             <strong>Telegram Auth</strong> tabs first to generate your manifest
             URL.
           </div>
           <div id="stremio-ready-content" class="hidden">
-            <label style="margin-top: 0">Manifest URL</label>
+            <label style="margin-top: 0" data-i18n="labelManifestUrl">Manifest URL</label>
             <div id="manifest-url" class="copy-box"></div>
             <div class="row">
-              <button id="copy-manifest">Copy manifest URL</button>
-              <a id="open-stremio" class="stremio-btn" href="#">Open in Stremio</a>
+              <button id="copy-manifest" data-i18n="btnCopyManifest">Copy manifest URL</button>
+              <a id="open-stremio" class="stremio-btn" href="#" data-i18n="btnOpenStremio">Open in Stremio</a>
             </div>
           </div>
-          <p class="muted" style="margin-top: 18px">
+          <p class="muted" style="margin-top: 18px" data-i18n="descReturnLater">
             You can return to this page later to refresh Telegram
             folders/channels or update settings.
           </p>
@@ -581,19 +617,19 @@
 
         <!-- ── Panel 5: Backup & Restore ──────────────────── -->
         <div id="panel-backup" class="tab-panel" role="tabpanel">
-          <h2>Backup &amp; Restore</h2>
-          <p>
+          <h2 data-i18n="headBackup">Backup &amp; Restore</h2>
+          <p data-i18n="descBackup">
             Export your full configuration (including API keys and session) as a
             JSON file, or import a previously exported file to restore this
             instance.
           </p>
-          <div class="notice info" style="margin-top: 0">
+          <div class="notice info" style="margin-top: 0" data-i18n="backupWarning">
             &#x26A0;&#xFE0F; The export file contains sensitive secrets. Keep it
             private and protect this page at the network/proxy level.
           </div>
           <div class="row">
-            <button id="export-config">Export config.json</button>
-            <button id="import-trigger" class="secondary">
+            <button id="export-config" data-i18n="btnExport">Export config.json</button>
+            <button id="import-trigger" class="secondary" data-i18n="btnImport">
               Import config.json
             </button>
             <input
@@ -613,6 +649,132 @@
 
     <script>
       const $ = (id) => document.getElementById(id);
+      
+      // ── Translations ────────────────────────────────────────────────────────
+      const TRANSLATIONS = {
+        en: {
+          descMain: "Private, single-instance setup for your VPS. Your Telegram session and API keys stay on this server.",
+          tabConfig: "⚙️ Configuration",
+          tabTelegram: "🔐 Telegram Auth",
+          tabSources: "📂 Sources",
+          tabAddon: "📋 Addon",
+          tabBackup: "💾 Backup & Restore",
+          headConfig: "Configuration",
+          descConfig: "Values already configured by the environment or local config are loaded automatically. Secret values stay on the server; leave their fields blank to keep them unchanged.",
+          labelPublicUrl: "Public HTTPS URL",
+          descPublicUrl: "This must point to this VPS and be reachable by Stremio. HTTPS is required by most Stremio clients.",
+          labelApiId: "Telegram API ID",
+          labelApiHash: "Telegram API hash",
+          descApiCreds: "Create Telegram credentials at",
+          labelTmdbToken: "TMDB Read Access Token",
+          descTmdbCreds: "Create or copy the v4 token at",
+          labelLanguage: "Preferred language",
+          btnSaveConfig: "Save configuration",
+          headTelegram: "Telegram Auth",
+          accountLabel: "Account 1",
+          accountSubConnected: "Connected",
+          accountBadgeActive: "Active",
+          descTelegram: "Use QR login from the Telegram mobile app, or use the phone-code method if QR is unavailable. TG2Stream stores only the resulting session on this VPS.",
+          btnGenQr: "Generate Telegram QR code",
+          btnPhoneToggle: "Auth by code",
+          labelPhone: "Telegram phone number",
+          btnSendCode: "Send code",
+          labelCode: "Telegram code",
+          labelPassword: "Telegram 2FA password (if enabled)",
+          btnVerifyCode: "Verify Telegram code",
+          headSources: "Sources",
+          optional: "(optional)",
+          descSources: "Sources are the Telegram folders and channels TG2Stream exposes through the addon. Only selected sources will be available as Stremio catalog — pick the ones that contain the media you want to stream.",
+          btnLoadSources: "Load folders and channels",
+          headFolders: "Folders",
+          notLoadedYet: "Not loaded yet.",
+          headChannels: "Channels",
+          searchChannelsPlaceholder: "Search channels by title or username",
+          btnSaveSources: "Save selected sources",
+          headAddon: "Ready for Stremio",
+          descAddon: "Install this addon in Stremio using the manifest URL below. It contains no user token because this VPS has one private instance.",
+          notReadyMsg: "⚠️ Complete the Configuration and Telegram Auth tabs first to generate your manifest URL.",
+          labelManifestUrl: "Manifest URL",
+          btnCopyManifest: "Copy manifest URL",
+          btnOpenStremio: "Open in Stremio",
+          descReturnLater: "You can return to this page later to refresh Telegram folders/channels or update settings.",
+          headBackup: "Backup & Restore",
+          descBackup: "Export your full configuration (including API keys and session) as a JSON file, or import a previously exported file to restore this instance.",
+          backupWarning: "⚠️ The export file contains sensitive secrets. Keep it private and protect this page at the network/proxy level.",
+          btnExport: "Export config.json",
+          btnImport: "Import config.json",
+        },
+        he: {
+          descMain: "התקנה פרטית וייעודית לשרת שלך. הסשן לטלגרם ומפתחות ה-API נשארים בשרת זה.",
+          tabConfig: "⚙️ הגדרות",
+          tabTelegram: "🔐 חיבור טלגרם",
+          tabSources: "📂 מקורות",
+          tabAddon: "📋 תוסף",
+          tabBackup: "💾 גיבוי ושחזור",
+          headConfig: "הגדרות",
+          descConfig: "ערכים שכבר הוגדרו דרך משתני סביבה או קובץ הגדרות נטענים אוטומטית. סודות נשארים בשרת; השאר שדות ריקים כדי לא לשנותם.",
+          labelPublicUrl: "כתובת HTTPS ציבורית",
+          descPublicUrl: "חייב להצביע לשרת זה ולהיות נגיש לסטרמיו. רוב הלקוחות של סטרמיו דורשים HTTPS.",
+          labelApiId: "מזהה API טלגרם (API ID)",
+          labelApiHash: "מפתח API טלגרם (API Hash)",
+          descApiCreds: "צור פרטי התחברות לטלגרם בכתובת",
+          labelTmdbToken: "טוקן גישה לקריאה ל-TMDB",
+          descTmdbCreds: "צור או העתק טוקן v4 בכתובת",
+          labelLanguage: "שפת חיפוש מועדפת",
+          btnSaveConfig: "שמור הגדרות",
+          headTelegram: "חיבור טלגרם",
+          accountLabel: "חשבון 1",
+          accountSubConnected: "מחובר",
+          accountBadgeActive: "פעיל",
+          descTelegram: "השתמש בהתחברות דרך קוד QR מהאפליקציה בנייד, או בשיטת קוד לטלפון אם סריקת QR אינה זמינה. TG2Stream שומר רק את הסשן שנוצר בשרת זה.",
+          btnGenQr: "צור קוד QR לטלגרם",
+          btnPhoneToggle: "התחבר באמצעות קוד",
+          labelPhone: "מספר טלפון (טלגרם)",
+          btnSendCode: "שלח קוד",
+          labelCode: "קוד טלגרם",
+          labelPassword: "סיסמת אימות דו-שלבי לטלגרם (אם מופעלת)",
+          btnVerifyCode: "אמת קוד טלגרם",
+          headSources: "מקורות",
+          optional: "(אופציונלי)",
+          descSources: "מקורות הם תיקיות טלגרם וערוצים ש-TG2Stream חושף דרך התוסף. רק מקורות נבחרים יופיעו בקטלוג של סטרמיו — בחר את אלה המכילים את התוכן שברצונך להזרים.",
+          btnLoadSources: "טען תיקיות וערוצים",
+          headFolders: "תיקיות",
+          notLoadedYet: "טרם נטען.",
+          headChannels: "ערוצים",
+          searchChannelsPlaceholder: "חפש ערוצים לפי שם או משתמש",
+          btnSaveSources: "שמור מקורות נבחרים",
+          headAddon: "מוכן לסטרמיו",
+          descAddon: "התקן תוסף זה בסטרמיו באמצעות כתובת ה-Manifest להלן. היא לא מכילה טוקן משתמש מאחר ובשרת זה ישנו מופע פרטי אחד.",
+          notReadyMsg: "⚠️ השלם את ההגדרות וחיבור טלגרם תחילה כדי ליצור את כתובת ה-Manifest שלך.",
+          labelManifestUrl: "כתובת Manifest",
+          btnCopyManifest: "העתק כתובת manifest",
+          btnOpenStremio: "פתח בסטרמיו",
+          descReturnLater: "ניתן לחזור לדף זה מאוחר יותר כדי לרענן תיקיות/ערוצים של טלגרם או לעדכן הגדרות.",
+          headBackup: "גיבוי ושחזור",
+          descBackup: "ייצא את כל ההגדרות (כולל מפתחות API וסשן) כקובץ JSON, או ייבא קובץ שיוצא בעבר כדי לשחזר מופע זה.",
+          backupWarning: "⚠️ קובץ הייצוא מכיל סודות רגישים. שמור עליו פרטי והגן על דף זה ברמת הרשת/פרוקסי.",
+          btnExport: "ייצא config.json",
+          btnImport: "ייבא config.json",
+        }
+      };
+
+      function applyLanguage(lang) {
+        const t = TRANSLATIONS[lang] || TRANSLATIONS["en"];
+        document.body.classList.toggle("rtl", lang === "he");
+        
+        document.querySelectorAll("[data-i18n]").forEach((el) => {
+          const key = el.dataset.i18n;
+          if (t[key]) el.textContent = t[key];
+        });
+        
+        document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
+          const key = el.dataset.i18nPlaceholder;
+          if (t[key]) el.placeholder = t[key];
+        });
+        
+        localStorage.setItem("tg2stream-ui-lang", lang);
+      }
+
       let setupStatus = null;
       let qrToken = null;
       let qrTimer = null;
@@ -805,11 +967,21 @@
       }
       function showTelegramConnected(p) {
         const suffix = phoneLast4(p) || setupStatus?.telegramPhoneLast4;
-        const sub = suffix ? `Connected · ···${suffix}` : "Connected";
-        // Update account stub
-        $("account-sub").textContent = sub;
+        
+        // Update translations directly to preserve suffix across language switches
+        TRANSLATIONS["en"].accountSubConnected = "Connected" + (suffix ? ` ***${suffix}` : "");
+        TRANSLATIONS["he"].accountSubConnected = "מחובר" + (suffix ? ` ***${suffix}` : "");
+        
+        // Reset label to default
+        TRANSLATIONS["en"].accountLabel = "Account 1";
+        TRANSLATIONS["he"].accountLabel = "חשבון 1";
+        
+        // Apply immediately to current UI
+        const currentLang = document.body.classList.contains("rtl") ? "he" : "en";
+        document.querySelector(".account-label").textContent = TRANSLATIONS[currentLang].accountLabel;
+        $("account-sub").textContent = TRANSLATIONS[currentLang].accountSubConnected;
+        
         show("account-stub-connected");
-
       }
       function updateSecretPlaceholders() {
         $("api-hash").placeholder =
@@ -906,7 +1078,9 @@
           });
           qrToken = data.qrToken;
           $("qr-image").src = data.qrCodeImage;
+          show("qr-area");
           show("qr-image");
+          show("phone-form", false);
           $("qr-status").textContent = "Scan this code in Telegram. Waiting…";
           clearInterval(qrTimer);
           qrTimer = setInterval(checkQr, 2500);
@@ -1166,7 +1340,14 @@
       // ── Wire up forms ────────────────────────────────────────────────────────
       $("config-form").addEventListener("submit", saveConfig);
       $("qr-button").addEventListener("click", generateQr);
-      $("phone-toggle").addEventListener("click", () => show("phone-form"));
+      $("phone-toggle").addEventListener("click", () => {
+        show("phone-form");
+        show("qr-area", false);
+        $("qr-image").removeAttribute("src");
+        $("qr-status").textContent = "";
+        if (typeof qrTimer !== "undefined") clearInterval(qrTimer);
+        if (typeof qrToken !== "undefined") qrToken = null;
+      });
       $("phone-form").addEventListener("submit", sendCode);
       $("code-form").addEventListener("submit", verifyCode);
       $("load-sources").addEventListener("click", loadSources);
@@ -1174,6 +1355,12 @@
       $("save-sources").addEventListener("click", saveSources);
 
       // ── Boot ─────────────────────────────────────────────────────────────────
+      const savedLang = localStorage.getItem("tg2stream-ui-lang") || "en";
+      $("ui-lang").value = savedLang;
+      applyLanguage(savedLang);
+
+      $("ui-lang").addEventListener("change", (e) => applyLanguage(e.target.value));
+
       loadStatus().catch((error) => showMessage(error.message, "error"));
     </script>
   </body>
