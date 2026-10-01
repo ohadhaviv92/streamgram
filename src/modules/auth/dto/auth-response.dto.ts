@@ -63,5 +63,7 @@ export class VerifyCodeResponseDto {
   user?: {
     id: number;
     phone: string | null;
+    /** URL-safe token used as the Stremio route prefix. */
+    token: string;
   };
 }

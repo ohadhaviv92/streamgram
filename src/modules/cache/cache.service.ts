@@ -33,8 +33,8 @@ export class CacheService {
     );
   }
 
-  private searchKey(key: string): string {
-    return `search:${key}`;
+  private searchKey(userToken: string, key: string): string {
+    return `u:${userToken}:search:${key}`;
   }
 
   private messageKey(chatId: string, messageId: number): string {
@@ -42,11 +42,11 @@ export class CacheService {
   }
 
   private folderKey(userToken: string): string {
-    return `folders:${userToken}`;
+    return `u:${userToken}:folders`;
   }
 
-  private channelVideosKey(channelId: string, offsetId: number): string {
-    return `channel_videos:${channelId}:${offsetId}`;
+  private channelVideosKey(userToken: string, channelId: string, offsetId: number): string {
+    return `u:${userToken}:channel_videos:${channelId}:${offsetId}`;
   }
 
   async get<T>(key: string): Promise<T | undefined> {
@@ -82,18 +82,19 @@ export class CacheService {
     };
   }
 
-  async getSearchResults<T>(cacheKey: string): Promise<T | null> {
-    const value = await this.cacheManager.get<T>(this.searchKey(cacheKey));
+  async getSearchResults<T>(userToken: string, cacheKey: string): Promise<T | null> {
+    const value = await this.cacheManager.get<T>(this.searchKey(userToken, cacheKey));
     return value !== undefined ? value : null;
   }
 
   async setSearchResults(
+    userToken: string,
     cacheKey: string,
     value: CacheValue,
   ): Promise<boolean> {
     try {
       await this.cacheManager.set(
-        this.searchKey(cacheKey),
+        this.searchKey(userToken, cacheKey),
         value,
         this.searchTtl * 1000,
       );
@@ -103,8 +104,8 @@ export class CacheService {
     }
   }
 
-  async deleteSearchResults(cacheKey: string): Promise<void> {
-    await this.cacheManager.del(this.searchKey(cacheKey));
+  async deleteSearchResults(userToken: string, cacheKey: string): Promise<void> {
+    await this.cacheManager.del(this.searchKey(userToken, cacheKey));
   }
 
   async getMessageDetails<T>(
@@ -179,11 +180,12 @@ export class CacheService {
    * Get cached channel videos
    */
   async getChannelVideos<T>(
+    userToken: string,
     channelId: string,
     offsetId: number = 0,
   ): Promise<T | null> {
     const value = await this.cacheManager.get<T>(
-      this.channelVideosKey(channelId, offsetId),
+      this.channelVideosKey(userToken, channelId, offsetId),
     );
     return value !== undefined ? value : null;
   }
@@ -192,13 +194,14 @@ export class CacheService {
    * Set cached channel videos
    */
   async setChannelVideos(
+    userToken: string,
     channelId: string,
     offsetId: number = 0,
     value: CacheValue,
   ): Promise<boolean> {
     try {
       await this.cacheManager.set(
-        this.channelVideosKey(channelId, offsetId),
+        this.channelVideosKey(userToken, channelId, offsetId),
         value,
         this.channelVideosTtl * 1000,
       );
@@ -211,12 +214,12 @@ export class CacheService {
   /**
    * Invalidate cached channel videos
    */
-  async invalidateChannelVideos(channelId: string): Promise<void> {
+  async invalidateChannelVideos(userToken: string, channelId: string): Promise<void> {
     // Clear all offset variations - in production might need pattern matching
     const offsets = [0, 50, 100, 150]; // Common offsets
     await Promise.all(
       offsets.map((offset) =>
-        this.cacheManager.del(this.channelVideosKey(channelId, offset)),
+        this.cacheManager.del(this.channelVideosKey(userToken, channelId, offset)),
       ),
     );
   }

@@ -2,23 +2,41 @@ import { InstanceConfigService } from "../user/instance-config.service";
 import { TelegramNestService } from "../telegram/telegram.service";
 import { SetupController } from "./setup.controller";
 
+/** Helper to build a mock InstanceConfigService with a users map. */
+function makeInstanceConfig(opts: {
+  sessionString?: string;
+  phone?: string | null;
+  isComplete?: boolean;
+  missing?: string[];
+}) {
+  const token = "testtoken123";
+  const sessionString = opts.sessionString ?? "secret-session";
+  // null means "not stored in users map" → controller must call getTelegramPhone
+  const phoneInEntry = opts.phone === null ? "" : (opts.phone ?? "+1 (555) 123-4567");
+
+  return {
+    getConfig: jest.fn().mockReturnValue({
+      publicUrl: "https://stream.example",
+      telegram: { apiId: 123, apiHash: "secret-hash" },
+      tmdb: { bearerToken: "secret-token" },
+      preferredLanguage: "he",
+      phone: null,
+      selectedFolders: [],
+      selectedChannels: [],
+    }),
+    getUsers: jest.fn().mockReturnValue(
+      sessionString
+        ? { [token]: { token, phone: phoneInEntry, sessionString } }
+        : {},
+    ),
+    isSetupComplete: jest.fn().mockReturnValue(opts.isComplete ?? true),
+    getMissingFields: jest.fn().mockReturnValue(opts.missing ?? []),
+  } as unknown as InstanceConfigService;
+}
+
 describe("SetupController", () => {
   it("returns safe effective configuration status without secrets", async () => {
-    const instanceConfig = {
-      getConfig: jest.fn().mockReturnValue({
-        publicUrl: "https://stream.example",
-        telegram: {
-          apiId: 123,
-          apiHash: "secret-hash",
-          sessionString: "secret-session",
-        },
-        tmdb: { bearerToken: "secret-token" },
-        preferredLanguage: "he",
-        phone: "+1 (555) 123-4567",
-      }),
-      isSetupComplete: jest.fn().mockReturnValue(true),
-      getMissingFields: jest.fn().mockReturnValue([]),
-    } as unknown as InstanceConfigService;
+    const instanceConfig = makeInstanceConfig({ phone: "+1 (555) 123-4567" });
     const telegramService = {
       getTelegramPhone: jest.fn(),
     } as unknown as TelegramNestService;
@@ -35,6 +53,8 @@ describe("SetupController", () => {
       telegramConfigured: true,
       telegramAuthenticated: true,
       telegramPhoneLast4: "4567",
+      userName: null,
+      userToken: "testtoken123",
       tmdbTokenPrefix: "secr****",
       tmdbConfigured: true,
     });
@@ -46,21 +66,7 @@ describe("SetupController", () => {
   });
 
   it("uses the active Telegram session when no phone is persisted", async () => {
-    const instanceConfig = {
-      getConfig: jest.fn().mockReturnValue({
-        publicUrl: "https://stream.example",
-        telegram: {
-          apiId: 123,
-          apiHash: "secret-hash",
-          sessionString: "secret-session",
-        },
-        tmdb: { bearerToken: "secret-token" },
-        preferredLanguage: "he",
-        phone: null,
-      }),
-      isSetupComplete: jest.fn().mockReturnValue(true),
-      getMissingFields: jest.fn().mockReturnValue([]),
-    } as unknown as InstanceConfigService;
+    const instanceConfig = makeInstanceConfig({ phone: null });
     const telegramService = {
       getTelegramPhone: jest.fn().mockResolvedValue("+44 (7700) 900-0123"),
     } as unknown as TelegramNestService;
@@ -68,28 +74,15 @@ describe("SetupController", () => {
     const status = await new SetupController(instanceConfig, telegramService).getStatus();
 
     expect(status.telegramPhoneLast4).toBe("0123");
+    // getTelegramPhone should have been called with the user's token and session
     expect(telegramService.getTelegramPhone).toHaveBeenCalledWith(
-      "instance",
+      "testtoken123",
       "secret-session",
     );
   });
 
   it("keeps status available when the Telegram phone lookup fails", async () => {
-    const instanceConfig = {
-      getConfig: jest.fn().mockReturnValue({
-        publicUrl: "https://stream.example",
-        telegram: {
-          apiId: 123,
-          apiHash: "secret-hash",
-          sessionString: "secret-session",
-        },
-        tmdb: { bearerToken: "secret-token" },
-        preferredLanguage: "he",
-        phone: null,
-      }),
-      isSetupComplete: jest.fn().mockReturnValue(true),
-      getMissingFields: jest.fn().mockReturnValue([]),
-    } as unknown as InstanceConfigService;
+    const instanceConfig = makeInstanceConfig({ phone: null });
     const telegramService = {
       getTelegramPhone: jest.fn().mockRejectedValue(new Error("offline")),
     } as unknown as TelegramNestService;
@@ -101,21 +94,12 @@ describe("SetupController", () => {
   });
 
   it("does not expose a suffix for phone numbers shorter than four digits", async () => {
-    const instanceConfig = {
-      getConfig: jest.fn().mockReturnValue({
-        publicUrl: "https://stream.example",
-        telegram: {
-          apiId: 123,
-          apiHash: "secret-hash",
-          sessionString: "",
-        },
-        tmdb: { bearerToken: "secret-token" },
-        preferredLanguage: "he",
-        phone: "+123",
-      }),
-      isSetupComplete: jest.fn().mockReturnValue(false),
-      getMissingFields: jest.fn().mockReturnValue(["telegram.sessionString"]),
-    } as unknown as InstanceConfigService;
+    const instanceConfig = makeInstanceConfig({
+      sessionString: "",
+      phone: "+123",
+      isComplete: false,
+      missing: ["telegram.sessionString (no authenticated users)"],
+    });
     const telegramService = {
       getTelegramPhone: jest.fn(),
     } as unknown as TelegramNestService;

@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Delete,
   Get,
   Body,
   Param,
@@ -101,5 +102,13 @@ export class AuthController {
   })
   async getQrInstructions(): Promise<QrInstructionsResponseDto> {
     return this.authService.getQrInstructions();
+  }
+
+  @Delete("logout/:token")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Logout user and delete session" })
+  @ApiResponse({ status: 200, description: "Logged out successfully" })
+  async logout(@Param("token") token: string): Promise<void> {
+    return this.authService.logout(token);
   }
 }

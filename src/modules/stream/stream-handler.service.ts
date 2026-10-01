@@ -300,8 +300,9 @@ export class StreamHandlerService {
 
     try {
       // Check cache first
-      const cacheKey = `folder_${user.id}_${folderId}_ep_${episodeNum}`;
+      const cacheKey = `folder_${user.token}_${folderId}_ep_${episodeNum}`;
       const cached = await this.cache.getChannelVideos<MediaSearchResult[]>(
+        user.token,
         cacheKey,
         0,
       );
@@ -353,7 +354,7 @@ export class StreamHandlerService {
       );
 
       // Cache the results
-      await this.cache.setChannelVideos(cacheKey, 0, messages);
+      await this.cache.setChannelVideos(user.token, cacheKey, 0, messages);
 
       logger.info(
         {
@@ -398,8 +399,9 @@ export class StreamHandlerService {
 
     try {
       // Check cache first
-      const cacheKey = `channel_vids_${user.id}_${channelId}`;
+      const cacheKey = `channel_vids_${user.token}_${channelId}`;
       const cached = await this.cache.getChannelVideos<MediaSearchResult[]>(
+        user.token,
         cacheKey,
         0,
       );
@@ -421,7 +423,7 @@ export class StreamHandlerService {
       );
 
       // Cache the results
-      await this.cache.setChannelVideos(cacheKey, 0, messages);
+      await this.cache.setChannelVideos(user.token, cacheKey, 0, messages);
 
       logger.info(
         {

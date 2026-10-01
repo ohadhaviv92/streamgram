@@ -49,7 +49,7 @@ import { CacheService } from "../cache/cache.service";
 
 @ApiTags("Stream")
 @UseGuards(InstanceProfileGuard)
-@Controller()
+@Controller(":userToken")
 export class StreamController {
   constructor(
     private readonly streamHandler: StreamHandlerService,
@@ -60,7 +60,7 @@ export class StreamController {
     private readonly instanceConfig: InstanceConfigService,
   ) {}
 
-  private getBaseUrl(): string {
+  private getBaseUrl(userToken?: string): string {
     const host =
       this.instanceConfig.getConfig().publicUrl ||
       this.configService.get<string>("server.streamHost");
@@ -75,16 +75,17 @@ export class StreamController {
       baseUrl = `https://${baseUrl}`;
     }
 
-    return baseUrl.replace(/\/$/, "");
+    baseUrl = baseUrl.replace(/\/$/, "");
+    return userToken ? `${baseUrl}/${userToken}` : baseUrl;
   }
 
   @Get("manifest.json")
   @ApiOperation({ summary: "Get Stremio addon manifest" })
   @ApiResponse({ status: 200, type: ManifestResponseDto })
-  async getManifest(): Promise<ManifestResponseDto> {
+  async getManifest(@Req() req: Request): Promise<ManifestResponseDto> {
     const nodeEnv = this.configService.get<string>("server.nodeEnv");
-    const baseUrl = this.getBaseUrl();
-    const settingsUrl = `${baseUrl}/`;
+    const baseUrl = this.getBaseUrl(req.user.token);
+    const settingsUrl = `${this.getBaseUrl()}/?action=settings&token=${req.user.token}`;
 
     return {
       id: "community.telegram-stream-addon",
@@ -128,9 +129,10 @@ export class StreamController {
 
   @Get("configure")
   @ApiOperation({ summary: "Redirect to the setup page" })
-  configure(@Res() res: Response): void {
+  configure(@Req() req: Request, @Res() res: Response): void {
+    const userToken = req.user.token;
     const baseUrl = this.getBaseUrl();
-    res.redirect(`${baseUrl}/`);
+    res.redirect(`${baseUrl}/?action=settings&token=${userToken}`);
   }
 
   @Get("catalog/series/telegram_folders.json")
@@ -159,7 +161,7 @@ export class StreamController {
       }
 
       // Get user's selected folder IDs
-      const selectedIds = await this.userService.getSelectedFolders(user.id);
+      const selectedIds = await this.userService.getSelectedFolders(user.token);
 
       // Show only selected folders (empty if none selected)
       const filteredFolders = folders.filter((folder: any) =>
@@ -239,11 +241,11 @@ export class StreamController {
   @ApiResponse({ status: 200 })
   async getChannelsCatalog(@Req() req: Request): Promise<{ metas: any[] }> {
     const user = req.user;
-    const baseUrl = this.getBaseUrl();
+    const baseUrl = this.getBaseUrl(user.token);
 
     try {
       // Get user's selected channel IDs
-      const selectedIds = await this.userService.getSelectedChannels(user.id);
+      const selectedIds = await this.userService.getSelectedChannels(user.token);
 
       // Transform channel IDs to Stremio metas
       const metas = await Promise.all(
@@ -421,7 +423,7 @@ export class StreamController {
     @Param("channelId") channelId: string,
   ): Promise<{ meta: any }> {
     const user = req.user;
-    const baseUrl = this.getBaseUrl();
+    const baseUrl = this.getBaseUrl(user.token);
 
     try {
       // Try to get channel info
@@ -627,7 +629,7 @@ export class StreamController {
             episodeNum,
           );
 
-          return { streams: this.mapMessagesToStreams(messages) };
+          return { streams: this.mapMessagesToStreams(messages, user.token) };
         }
 
         // Handle tmdb:id:season:episode format (4 parts)
@@ -691,7 +693,7 @@ export class StreamController {
             channelId,
           );
 
-          return { streams: this.mapMessagesToStreams(messages) };
+          return { streams: this.mapMessagesToStreams(messages, user.token) };
         }
 
         if (type === "movie") {
@@ -731,7 +733,7 @@ export class StreamController {
             req.user.token,
             item,
             mediaDetails,
-            this.getBaseUrl(),
+            this.getBaseUrl(user.token),
           ),
         )
         .filter((stream): stream is NonNullable<typeof stream> =>
@@ -744,7 +746,7 @@ export class StreamController {
         mediaDetails,
         idWithEpisode,
         user.token,
-        this.getBaseUrl(),
+        this.getBaseUrl(user.token),
       );
       return { streams: [...streams, howToTagStream] };
     } catch (error) {
@@ -920,7 +922,7 @@ export class StreamController {
   ): Promise<void> {
     const user = req.user;
     const decoded = decodeURIComponent(catalogId);
-    const cacheKey = `tag-sent:${user.id}:${decoded}`;
+    const cacheKey = `tag-sent:${user.token}:${decoded}`;
 
     try {
       // Check if we've already sent this tag recently (within last 5 minutes)
@@ -948,7 +950,7 @@ export class StreamController {
         await this.cache.set(cacheKey, "sent", 300);
 
         // Clear cache for this search to ensure tagged results appear immediately
-        await this.telegramService.clearCacheByCatalogId(decoded, user.id);
+        await this.telegramService.clearCacheByCatalogId(decoded, user.token);
       } else {
         logger.debug(
           { userId: user.id, catalogId: decoded },
@@ -981,11 +983,11 @@ export class StreamController {
   /**
    * Helper to map Telegram messages to Stremio streams
    */
-  private mapMessagesToStreams(messages: MediaSearchResult[]): any[] {
+  private mapMessagesToStreams(messages: MediaSearchResult[], userToken: string): any[] {
     return messages
       .slice(0, 50)
       .map((item) =>
-        formatStreamForStremio("instance", item, undefined, this.getBaseUrl()),
+        formatStreamForStremio(userToken, item, undefined, this.getBaseUrl(userToken)),
       )
       .filter((stream) => Boolean(stream));
   }

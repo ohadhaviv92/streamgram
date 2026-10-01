@@ -424,7 +424,7 @@ describe("TelegramNestService - Tag Feature", () => {
 
   describe("Language-aware search caching", () => {
     const client = { connected: true } as any;
-    const user = { id: 1, language: "he" } as any;
+    const user = { id: 1, language: "he", token: "instance" } as any;
     const movie = {
       id: 550,
       imdbId: "tt0137523",
@@ -459,7 +459,7 @@ describe("TelegramNestService - Tag Feature", () => {
       await service.searchMedia(client, "Бойцовский клуб", movie, user);
 
       const keys = mockCacheService.getSearchResults.mock.calls.map(
-        ([key]) => key,
+        ([_, key]) => key,
       );
       expect(keys[0]).toContain("_he_");
       expect(keys[1]).toContain("_ru_");
@@ -475,12 +475,12 @@ describe("TelegramNestService - Tag Feature", () => {
       await service.searchMedia(client, "Бойцовский клуб", movie, user, "tmdb:550");
 
       const keys = mockCacheService.getSearchResults.mock.calls.map(
-        ([key]) => key,
+        ([_, key]) => key,
       );
       expect(keys[0]).toContain(":he:");
-      expect(keys[1]).toBe("catalog:1_he_tmdb:550");
+      expect(keys[1]).toBe("catalog:instance_he_tmdb:550");
       expect(keys[2]).toContain(":ru:");
-      expect(keys[3]).toBe("catalog:1_ru_tmdb:550");
+      expect(keys[3]).toBe("catalog:instance_ru_tmdb:550");
     });
   });
 
@@ -726,33 +726,33 @@ describe("TelegramNestService - Tag Feature", () => {
       };
 
       await service.searchMedia(client, movie.localizedTitle, movie, user);
-      const movieHebrewKey = mockCacheService.getSearchResults.mock.calls[0][0];
+      const movieHebrewKey = mockCacheService.getSearchResults.mock.calls[0][1];
       (service as any).LANGUAGE_CONFIG.preferredLanguage = "ru";
       await service.searchMedia(client, movie.localizedTitle, movie, {
         ...user,
         language: "ru",
       } as any);
-      const movieRussianKey = mockCacheService.getSearchResults.mock.calls[1][0];
+      const movieRussianKey = mockCacheService.getSearchResults.mock.calls[1][1];
 
       (service as any).LANGUAGE_CONFIG.preferredLanguage = "he";
       await service.searchMedia(client, episode.localizedTitle, episode, user);
-      const episodeHebrewKey = mockCacheService.getSearchResults.mock.calls[2][0];
+      const episodeHebrewKey = mockCacheService.getSearchResults.mock.calls[2][1];
       (service as any).LANGUAGE_CONFIG.preferredLanguage = "ru";
       await service.searchMedia(client, episode.localizedTitle, episode, {
         ...user,
         language: "ru",
       } as any);
-      const episodeRussianKey = mockCacheService.getSearchResults.mock.calls[3][0];
+      const episodeRussianKey = mockCacheService.getSearchResults.mock.calls[3][1];
 
       (service as any).LANGUAGE_CONFIG.preferredLanguage = "he";
       await service.searchMedia(client, "/tag tmdb:1", movie, user, "tmdb:1");
-      const catalogHebrewKey = mockCacheService.getSearchResults.mock.calls[4][0];
+      const catalogHebrewKey = mockCacheService.getSearchResults.mock.calls[4][1];
       (service as any).LANGUAGE_CONFIG.preferredLanguage = "ru";
       await service.searchMedia(client, "/tag tmdb:1", movie, {
         ...user,
         language: "ru",
       } as any, "tmdb:1");
-      const catalogRussianKey = mockCacheService.getSearchResults.mock.calls[5][0];
+      const catalogRussianKey = mockCacheService.getSearchResults.mock.calls[5][1];
 
       expect(movieHebrewKey).not.toBe(movieRussianKey);
       expect(episodeHebrewKey).not.toBe(episodeRussianKey);

@@ -25,20 +25,24 @@ export class SetupController {
   @Get("status")
   async getStatus() {
     const config = this.instanceConfig.getConfig();
-    const telegramAuthenticated = Boolean(config.telegram.sessionString);
-    let telegramPhoneLast4 = this.phoneLast4(config.phone);
+    const users = Object.values(this.instanceConfig.getUsers());
+    const telegramAuthenticated = users.some((u) => Boolean(u.sessionString));
 
-    if (!telegramPhoneLast4 && telegramAuthenticated) {
-      try {
-        telegramPhoneLast4 = this.phoneLast4(
-          await this.telegramService.getTelegramPhone(
-            "instance",
-            config.telegram.sessionString,
-          ),
-        );
-      } catch {
-        // Status should remain available even if Telegram is temporarily unreachable.
-        telegramPhoneLast4 = null;
+    let telegramPhoneLast4: string | null = null;
+    if (!telegramPhoneLast4 && telegramAuthenticated && users[0]) {
+      telegramPhoneLast4 = this.phoneLast4(users[0].phone);
+      if (!telegramPhoneLast4) {
+        try {
+          telegramPhoneLast4 = this.phoneLast4(
+            await this.telegramService.getTelegramPhone(
+              users[0].token,
+              users[0].sessionString,
+            ),
+          );
+        } catch {
+          // Status should remain available even if Telegram is temporarily unreachable.
+          telegramPhoneLast4 = null;
+        }
       }
     }
 
@@ -52,6 +56,13 @@ export class SetupController {
       telegramConfigured: Boolean(config.telegram.apiId && config.telegram.apiHash),
       telegramAuthenticated,
       telegramPhoneLast4,
+      userToken: users[0]?.token || null,
+      userName: users[0]?.name || null,
+      users: users.map((u) => ({
+        token: u.token,
+        name: u.name || null,
+        phoneLast4: this.phoneLast4(u.phone),
+      })),
       tmdbTokenPrefix: this.maskSecret(config.tmdb.bearerToken),
       tmdbConfigured: Boolean(config.tmdb.bearerToken),
     };

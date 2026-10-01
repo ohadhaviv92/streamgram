@@ -1,16 +1,35 @@
 export type SupportedLanguage = "en" | "he" | "ru" | "ar";
 
 /**
- * The single profile owned by one TG2Stream installation.
+ * A single user's persisted entry inside the `users` map.
+ */
+export interface UserEntry {
+  /** Optional display name (not used for auth). */
+  name?: string;
+  /** Telegram phone number (with + prefix). */
+  phone: string;
+  /** Authenticated Telegram session string. */
+  sessionString: string;
+  /** Short URL-safe token generated once and stored alongside the entry. */
+  token: string;
+  /** IDs of selected folders for this user. */
+  selectedFolders?: number[];
+  /** IDs of selected channels for this user. */
+  selectedChannels?: string[];
+}
+
+/**
+ * The single profile owned by one TG2Stream installation (one user).
  *
- * This intentionally keeps the old snake_case field names used by the
- * streaming code while representing only the local installation.
+ * Keeps the existing snake_case field names used by streaming code while
+ * reflecting the per-user token and session from the users map.
  */
 export interface InstanceProfile {
   id: 1;
   phone: string | null;
   session_string: string;
-  token: "instance";
+  /** The short per-user URL-safe token (used as route prefix). */
+  token: string;
   language: SupportedLanguage;
   tmdb_token: string | null;
   selected_folders: string;
@@ -19,18 +38,16 @@ export interface InstanceProfile {
 
 export interface PersistedInstanceConfig {
   publicUrl?: string;
-  phone?: string;
   telegram?: {
     apiId?: number;
     apiHash?: string;
-    sessionString?: string;
   };
   tmdb?: {
     bearerToken?: string;
   };
   preferredLanguage?: SupportedLanguage;
-  selectedFolders?: number[];
-  selectedChannels?: string[];
+  /** Map of userToken → UserEntry. */
+  users?: Record<string, UserEntry>;
 }
 
 export interface EffectiveInstanceConfig {
@@ -38,13 +55,9 @@ export interface EffectiveInstanceConfig {
   telegram: {
     apiId: number;
     apiHash: string;
-    sessionString: string;
   };
   tmdb: {
     bearerToken: string;
   };
   preferredLanguage: SupportedLanguage;
-  phone: string | null;
-  selectedFolders: number[];
-  selectedChannels: string[];
 }

@@ -5,6 +5,7 @@ import {
 } from "../telegram/telegram.service";
 import { UserService } from "../user/user.service";
 import { CacheService } from "../cache/cache.service";
+import { TelegramClientManager } from "../telegram/telegram-client.manager";
 import { logger } from "../../logger";
 import * as QRCode from "qrcode";
 
@@ -14,12 +15,19 @@ export class AuthService {
     private readonly telegramService: TelegramNestService,
     private readonly userService: UserService,
     private readonly cacheService: CacheService,
+    private readonly clientManager: TelegramClientManager,
   ) {}
 
   /**
    * Normalize phone number to ensure it starts with +
    * Telegram API may return phone numbers with or without the + prefix
    */
+  
+  async logout(token: string): Promise<void> {
+    await this.clientManager.removeClient(token);
+    await this.userService.deleteUser(token);
+  }
+
   private normalizePhoneNumber(phone: string): string {
     if (!phone) return phone;
     // Remove any whitespace
@@ -123,6 +131,7 @@ export class AuthService {
     user?: {
       id: number;
       phone: string | null;
+      token: string;
     };
   }> {
     // Normalize phone number for consistency
@@ -151,22 +160,26 @@ export class AuthService {
       );
 
       // Check if user already exists
-      let user = await this.userService.findByPhone(normalizedPhone);
+      let userProfile = await this.userService.findByPhone(normalizedPhone);
 
-      if (user) {
+      let userToken: string;
+      if (userProfile) {
         // Update existing user's session
-        user = await this.userService.update(user.id, {
+        userProfile = await this.userService.update(userProfile.token, {
           session_string: sessionString,
         });
+        userToken = userProfile.token;
         logger.info(
-          { phone: normalizedPhone, userId: user.id },
+          { phone: normalizedPhone, token: userToken },
           "Updated existing user",
         );
       } else {
-        // Create new user
-        user = await this.userService.create(normalizedPhone, sessionString);
+        // Create new user – returns the full UserEntry with token
+        const entry = await this.userService.create(normalizedPhone, sessionString);
+        userToken = entry.token;
+        userProfile = await this.userService.findByPhone(normalizedPhone) as NonNullable<typeof userProfile>;
         logger.info(
-          { phone: normalizedPhone, userId: user.id },
+          { phone: normalizedPhone, token: userToken },
           "Created new user",
         );
       }
@@ -178,8 +191,9 @@ export class AuthService {
         success: true,
         message: "Authentication successful",
         user: {
-          id: user.id,
-          phone: user.phone,
+          id: userProfile.id,
+          phone: userProfile.phone,
+          token: userToken,
         },
       };
     } catch (error) {
@@ -291,6 +305,7 @@ export class AuthService {
     user?: {
       id: number;
       phone: string | null;
+      token: string;
     };
   }> {
     try {
@@ -350,21 +365,25 @@ export class AuthService {
       const phone = this.normalizePhoneNumber(me.phone);
 
       // Check if user already exists
-      let user = await this.userService.findByPhone(phone);
+      let qrUserProfile = await this.userService.findByPhone(phone);
 
-      if (user) {
+      let qrUserToken: string;
+      if (qrUserProfile) {
         // Update existing user's session
-        user = await this.userService.update(user.id, {
+        qrUserProfile = await this.userService.update(qrUserProfile.token, {
           session_string: sessionString,
         });
+        qrUserToken = qrUserProfile.token;
         logger.info(
-          { phone, userId: user.id },
+          { phone, token: qrUserToken },
           "Updated existing user via QR auth",
         );
       } else {
         // Create new user
-        user = await this.userService.create(phone, sessionString);
-        logger.info({ phone, userId: user.id }, "Created new user via QR auth");
+        const entry = await this.userService.create(phone, sessionString);
+        qrUserToken = entry.token;
+        qrUserProfile = await this.userService.findByPhone(phone) as NonNullable<typeof qrUserProfile>;
+        logger.info({ phone, token: qrUserToken }, "Created new user via QR auth");
       }
 
       // Clear the QR session from cache
@@ -374,8 +393,9 @@ export class AuthService {
         status: "authorized",
         message: "Authentication successful",
         user: {
-          id: user.id,
-          phone: user.phone,
+          id: qrUserProfile.id,
+          phone: qrUserProfile.phone,
+          token: qrUserToken,
         },
       };
     } catch (error) {

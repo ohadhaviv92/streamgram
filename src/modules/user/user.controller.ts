@@ -7,6 +7,7 @@ import {
   Post,
   Put,
   Req,
+  Query,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Request } from "express";
@@ -35,8 +36,8 @@ export class UserController {
 
   @Get("settings")
   @HttpCode(HttpStatus.OK)
-  async getSettings(@Req() request: Request): Promise<UserSettingsResponseDto> {
-    const profile = this.userService.getProfile();
+  async getSettings(@Req() request: Request, @Query('token') token?: string): Promise<UserSettingsResponseDto> {
+    const profile = this.userService.getProfile(token);
     const baseUrl = this.getBaseUrl(request);
     const telegramConnected = await this.telegramService.checkTelegramConnection(
       profile.token,
@@ -47,17 +48,17 @@ export class UserController {
       success: true,
       language: profile.language,
       tmdbToken: null,
-      manifestUrl: `${baseUrl}/manifest.json`,
+      manifestUrl: `${baseUrl}/${profile.token}/manifest.json`,
       telegramConnected,
-      catalogUrl: `${baseUrl}/catalog/series/telegram_folders.json`,
-      channelsCatalogUrl: `${baseUrl}/catalog/movie/telegram_channels.json`,
+      catalogUrl: `${baseUrl}/${profile.token}/catalog/series/telegram_folders.json`,
+      channelsCatalogUrl: `${baseUrl}/${profile.token}/catalog/movie/telegram_channels.json`,
     };
   }
 
   @Get("telegram-status")
   @HttpCode(HttpStatus.OK)
-  async checkTelegramStatus(): Promise<{ success: boolean; isConnected: boolean }> {
-    const profile = this.userService.getProfile();
+  async checkTelegramStatus(@Query('token') token?: string): Promise<{ success: boolean; isConnected: boolean }> {
+    const profile = this.userService.getProfile(token);
     const isConnected = await this.telegramService.checkTelegramConnection(
       profile.token,
       profile.session_string,
@@ -70,30 +71,45 @@ export class UserController {
   async updateSettings(
     @Body() body: UpdateSettingsDto,
     @Req() request: Request,
+    @Query('token') token?: string,
   ): Promise<SettingsResponseDto> {
-    const profile = this.userService.getProfile();
-    await this.userService.updateSettings(profile.id, body);
+    const profile = this.userService.getProfile(token);
+    await this.userService.updateSettings(profile.token, body);
     const baseUrl = this.getBaseUrl(request);
 
     return {
       success: true,
       message: "Settings updated successfully",
-      manifestUrl: `${baseUrl}/manifest.json`,
-      catalogUrl: `${baseUrl}/catalog/series/telegram_folders.json`,
-      channelsCatalogUrl: `${baseUrl}/catalog/movie/telegram_channels.json`,
+      manifestUrl: `${baseUrl}/${profile.token}/manifest.json`,
+      catalogUrl: `${baseUrl}/${profile.token}/catalog/series/telegram_folders.json`,
+      channelsCatalogUrl: `${baseUrl}/${profile.token}/catalog/movie/telegram_channels.json`,
     };
+  }
+
+
+  @Put("name")
+  @HttpCode(HttpStatus.OK)
+  async updateName(
+    @Body() body: { name: string },
+    @Query('token') token?: string,
+  ): Promise<{ success: boolean }> {
+    const profile = this.userService.getProfile(token);
+    if (profile) {
+      await this.userService.updateName(profile.token, body.name);
+    }
+    return { success: true };
   }
 
   @Get("folders")
   @HttpCode(HttpStatus.OK)
-  async getFolders(@Req() request: Request): Promise<FoldersResponseDto> {
-    const profile = this.userService.getProfile();
+  async getFolders(@Req() request: Request, @Query('token') token?: string): Promise<FoldersResponseDto> {
+    const profile = this.userService.getProfile(token);
     try {
       const allFolders = await this.telegramService.getUserFolders(
         profile.token,
         profile.session_string,
       );
-      const selectedIds = await this.userService.getSelectedFolders(profile.id);
+      const selectedIds = await this.userService.getSelectedFolders(profile.token);
       const baseUrl = this.getBaseUrl(request);
 
       return {
@@ -104,7 +120,7 @@ export class UserController {
           channelCount: folder.channelIds.length,
           isSelected: selectedIds.includes(folder.id),
         })),
-        catalogUrl: `${baseUrl}/catalog/series/telegram_folders.json`,
+        catalogUrl: `${baseUrl}/${profile.token}/catalog/series/telegram_folders.json`,
       };
     } catch (error) {
       logger.error({ error: (error as Error).message }, "Failed to get folders");
@@ -117,15 +133,16 @@ export class UserController {
   async updateFolders(
     @Body() body: UpdateFoldersDto,
     @Req() request: Request,
+    @Query('token') token?: string,
   ): Promise<SettingsResponseDto> {
-    const profile = this.userService.getProfile();
+    const profile = this.userService.getProfile(token);
     try {
-      await this.userService.updateSelectedFolders(profile.id, body.folderIds);
+      await this.userService.updateSelectedFolders(profile.token, body.folderIds);
       await this.cache.invalidateUserFolders(profile.token);
       return {
         success: true,
         message: "Folders updated successfully",
-        catalogUrl: `${this.getBaseUrl(request)}/catalog/series/telegram_folders.json`,
+        catalogUrl: `${this.getBaseUrl(request)}/${profile.token}/catalog/series/telegram_folders.json`,
       };
     } catch (error) {
       logger.error({ error: (error as Error).message }, "Failed to update folders");
@@ -135,14 +152,14 @@ export class UserController {
 
   @Get("channels")
   @HttpCode(HttpStatus.OK)
-  async getChannels(@Req() request: Request): Promise<ChannelsResponseDto> {
-    const profile = this.userService.getProfile();
+  async getChannels(@Req() request: Request, @Query('token') token?: string): Promise<ChannelsResponseDto> {
+    const profile = this.userService.getProfile(token);
     try {
       const allChannels = await this.telegramService.getUserChannels(
         profile.token,
         profile.session_string,
       );
-      const selectedIds = await this.userService.getSelectedChannels(profile.id);
+      const selectedIds = await this.userService.getSelectedChannels(profile.token);
       const baseUrl = this.getBaseUrl(request);
 
       return {
@@ -154,7 +171,7 @@ export class UserController {
           memberCount: channel.memberCount,
           isSelected: selectedIds.includes(channel.id),
         })),
-        catalogUrl: `${baseUrl}/catalog/movie/telegram_channels.json`,
+        catalogUrl: `${baseUrl}/${profile.token}/catalog/movie/telegram_channels.json`,
       };
     } catch (error) {
       logger.error({ error: (error as Error).message }, "Failed to get channels");
@@ -167,15 +184,16 @@ export class UserController {
   async updateChannels(
     @Body() body: UpdateChannelsDto,
     @Req() request: Request,
+    @Query('token') token?: string,
   ): Promise<SettingsResponseDto> {
-    const profile = this.userService.getProfile();
+    const profile = this.userService.getProfile(token);
     try {
-      await this.userService.updateSelectedChannels(profile.id, body.channelIds);
+      await this.userService.updateSelectedChannels(profile.token, body.channelIds);
       await this.cache.invalidateUserFolders(profile.token);
       return {
         success: true,
         message: "Channels updated successfully",
-        channelsCatalogUrl: `${this.getBaseUrl(request)}/catalog/movie/telegram_channels.json`,
+        channelsCatalogUrl: `${this.getBaseUrl(request)}/${profile.token}/catalog/movie/telegram_channels.json`,
       };
     } catch (error) {
       logger.error({ error: (error as Error).message }, "Failed to update channels");

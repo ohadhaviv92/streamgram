@@ -1518,7 +1518,7 @@ export class TelegramNestService {
     // Use simplified cache key with catalog ID when available
     let cacheKey: string;
     if (catalogId) {
-      cacheKey = `catalog:${user.id}_${language}_${catalogId}`;
+      cacheKey = `catalog:${user.token}_${language}_${catalogId}`;
     } else if (episodeInfo) {
       cacheKey = this.buildEpisodeCacheKey(
         media.imdbId,
@@ -1536,7 +1536,7 @@ export class TelegramNestService {
     }
 
     const cached =
-      await this.cache.getSearchResults<MediaSearchResult[]>(cacheKey);
+      await this.cache.getSearchResults<MediaSearchResult[]>(user.token, cacheKey);
     if (cached) {
       logger.info(
         { cacheKey, count: cached.length },
@@ -1647,7 +1647,7 @@ export class TelegramNestService {
 
     const limited = finalResults;
 
-    await this.cache.setSearchResults(cacheKey, limited);
+    await this.cache.setSearchResults(user.token, cacheKey, limited);
     logger.info(
       {
         cacheKey,
@@ -1694,22 +1694,22 @@ export class TelegramNestService {
    */
   async clearCacheByCatalogId(
     catalogId: string,
-    userId: number,
+    userToken: string,
   ): Promise<void> {
     try {
       const languages = ["en", "he", "ru", "ar"];
       const cacheKeys = languages.map(
-        (language) => `catalog:${userId}_${language}_${catalogId}`,
+        (language) => `catalog:${userToken}_${language}_${catalogId}`,
       );
 
       await Promise.all(
         cacheKeys.map((cacheKey) =>
-          this.cache.deleteSearchResults(cacheKey),
+          this.cache.deleteSearchResults(userToken, cacheKey),
         ),
       );
 
       logger.info(
-        { catalogId, userId, cacheKeys },
+        { catalogId, userToken, cacheKeys },
         "Cleared language-specific catalog caches",
       );
     } catch (error) {

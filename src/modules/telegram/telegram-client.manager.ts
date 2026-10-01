@@ -8,91 +8,186 @@ import { InstanceConfigService } from "../user/instance-config.service";
 export interface ClientSession {
   client: TelegramClient;
   sessionString: string;
+  lastUsed: Date;
 }
 
-/** Manages the single Telegram client owned by this TG2Stream installation. */
+/**
+ * Manages Telegram client instances keyed by user token.
+ * Each user gets their own lazily-initialised client that is kept alive
+ * in-memory for up to one hour of idle time.
+ */
 @Injectable()
 export class TelegramClientManager implements OnApplicationShutdown {
-  private session: ClientSession | null = null;
-  private initialization: Promise<TelegramClient> | null = null;
+  /** Live clients, keyed by user token. */
+  private readonly clients = new Map<string, ClientSession>();
+
+  /**
+   * Serialises concurrent initialisation attempts for the same token so that
+   * exactly one `initializeClient` call is in flight at a time.
+   */
+  private readonly initializing = new Map<string, Promise<TelegramClient>>();
+
+  /** Idle-cleanup timer handle (kept so tests can clear it if needed). */
+  private readonly cleanupTimer: ReturnType<typeof setInterval>;
 
   constructor(
     private readonly configService: ConfigService,
     @Optional() private readonly instanceConfig?: InstanceConfigService,
   ) {
     if (!this.getApiId() || !this.getApiHash()) {
-      logger.warn("Telegram API credentials are not configured; setup mode is active");
+      logger.warn(
+        "Telegram API credentials are not configured; setup mode is active",
+      );
     }
+
+    // Clean up clients idle for more than one hour, every 30 minutes.
+    this.cleanupTimer = setInterval(
+      () => void this.cleanupIdleClients(),
+      30 * 60 * 1000,
+    );
   }
 
+  // ---------------------------------------------------------------------------
+  // Public API
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Returns the live client for `userToken`, initialising one if necessary.
+   * If `sessionString` has changed since the last init the old client is
+   * disconnected first.
+   */
   async getOrInitializeClient(
-    _instanceKey = "instance",
-    suppliedSessionString?: string,
+    userToken: string,
+    sessionString?: string,
   ): Promise<TelegramClient> {
-    const sessionString =
-      suppliedSessionString || this.instanceConfig?.getConfig().telegram.sessionString || "";
+    const session = sessionString || "";
 
     if (!this.getApiId() || !this.getApiHash()) {
       throw new Error("Telegram API credentials are not configured");
     }
-    if (!sessionString) {
+    if (!session) {
       throw new Error("Telegram session is not configured");
     }
 
-    if (this.session && this.session.sessionString !== sessionString) {
-      await this.removeClient();
-    }
+    const existing = this.clients.get(userToken);
 
-    if (this.session) {
-      try {
-        if (this.session.client.connected) return this.session.client;
-      } catch (error) {
-        logger.warn({ error }, "Existing Telegram client is unavailable");
-        await this.removeClient();
+    if (existing) {
+      // Re-authenticate: session has been renewed.
+      if (existing.sessionString !== session) {
+        logger.info(
+          { userToken },
+          "Session string changed – replacing Telegram client",
+        );
+        await this.removeClient(userToken);
+      } else {
+        existing.lastUsed = new Date();
+        try {
+          if (existing.client.connected) return existing.client;
+        } catch (error) {
+          logger.warn(
+            { userToken, error },
+            "Existing Telegram client is unavailable – replacing",
+          );
+          await this.removeClient(userToken);
+        }
       }
     }
 
-    if (this.initialization) return this.initialization;
+    // If an initialisation is already in progress for this token, reuse it.
+    const inFlight = this.initializing.get(userToken);
+    if (inFlight) return inFlight;
 
-    this.initialization = this.initializeClient(sessionString)
+    const init = this.initializeClient(session)
       .then((client) => {
-        this.session = { client, sessionString };
+        this.clients.set(userToken, { client, sessionString: session, lastUsed: new Date() });
+        logger.info(
+          { userToken, totalClients: this.clients.size },
+          "Initialized new Telegram client for user",
+        );
         return client;
       })
       .finally(() => {
-        this.initialization = null;
+        this.initializing.delete(userToken);
       });
 
-    return this.initialization;
+    this.initializing.set(userToken, init);
+    return init;
   }
 
-  getClient(): TelegramClient | null {
-    return this.session?.client || null;
+  /**
+   * Returns an existing client without triggering initialisation.
+   * Updates `lastUsed` on hit.
+   */
+  getClient(userToken: string): TelegramClient | null {
+    const session = this.clients.get(userToken);
+    if (session) {
+      session.lastUsed = new Date();
+      return session.client;
+    }
+    return null;
   }
 
-  async removeClient(): Promise<void> {
-    const session = this.session;
-    this.session = null;
+  /** Disconnects and removes the client for `userToken`. */
+  async removeClient(userToken: string): Promise<void> {
+    const session = this.clients.get(userToken);
     if (!session) return;
 
+    this.clients.delete(userToken);
     try {
       await session.client.disconnect();
       await session.client.destroy();
     } catch (error) {
-      logger.warn({ error }, "Failed to disconnect Telegram client");
+      logger.warn({ error, userToken }, "Failed to disconnect Telegram client");
     }
+    logger.info({ userToken }, "Removed Telegram client");
   }
 
+  /** Total number of live clients. */
   getActiveClientCount(): number {
-    return this.session ? 1 : 0;
+    return this.clients.size;
   }
 
+  /** Disconnect every live client (graceful shutdown). */
   async disconnectAll(): Promise<void> {
-    await this.removeClient();
+    logger.info(
+      { count: this.clients.size },
+      "Disconnecting all Telegram clients",
+    );
+    await Promise.all(
+      Array.from(this.clients.keys()).map((token) => this.removeClient(token)),
+    );
   }
 
   async onApplicationShutdown(): Promise<void> {
+    clearInterval(this.cleanupTimer);
     await this.disconnectAll();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Private helpers
+  // ---------------------------------------------------------------------------
+
+  /** Disconnects clients that have been idle for more than one hour. */
+  private async cleanupIdleClients(): Promise<void> {
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    const toRemove: string[] = [];
+
+    for (const [token, session] of this.clients.entries()) {
+      if (session.lastUsed < oneHourAgo) {
+        toRemove.push(token);
+      }
+    }
+
+    for (const token of toRemove) {
+      await this.removeClient(token);
+    }
+
+    if (toRemove.length > 0) {
+      logger.info(
+        { count: toRemove.length, remaining: this.clients.size },
+        "Cleaned up idle Telegram clients",
+      );
+    }
   }
 
   private getApiId(): number {
@@ -128,7 +223,7 @@ export class TelegramClientManager implements OnApplicationShutdown {
 
     let lastErrorTime = 0;
     let errorCount = 0;
-    const errorLogThrottleMs = 10000;
+    const errorLogThrottleMs = 10_000;
     const maxErrorsBeforeDisconnect = 5;
 
     client.addEventHandler((event: any) => {
@@ -149,10 +244,13 @@ export class TelegramClientManager implements OnApplicationShutdown {
       }
 
       if (errorCount >= maxErrorsBeforeDisconnect) {
-        logger.error({ errorCount }, "Telegram client exceeded error threshold");
-        client.disconnect().catch((error) =>
-          logger.debug({ error }, "Error during forced Telegram disconnect"),
+        logger.error(
+          { errorCount },
+          "Telegram client exceeded error threshold, disconnecting",
         );
+        client
+          .disconnect()
+          .catch((err) => logger.debug({ err }, "Error during forced disconnect"));
       }
     });
 
@@ -166,7 +264,10 @@ export class TelegramClientManager implements OnApplicationShutdown {
         await client.disconnect();
         await client.destroy();
       } catch (disconnectError) {
-        logger.warn({ error: disconnectError }, "Failed to clean up Telegram client");
+        logger.warn(
+          { error: disconnectError },
+          "Failed to clean up Telegram client after init error",
+        );
       }
       throw error;
     }

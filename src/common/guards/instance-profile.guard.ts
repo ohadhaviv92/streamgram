@@ -1,6 +1,11 @@
-import { CanActivate, ExecutionContext, Injectable } from "@nestjs/common";
+import {
+  CanActivate,
+  ExecutionContext,
+  Injectable,
+  UnauthorizedException,
+} from "@nestjs/common";
 import { Request } from "express";
-import { UserService } from "../../modules/user/user.service";
+import { InstanceConfigService } from "../../modules/user/instance-config.service";
 import { InstanceProfile } from "../../modules/user/instance-profile";
 
 declare global {
@@ -11,14 +16,30 @@ declare global {
   }
 }
 
-/** Attaches the one local instance profile to a Stremio request. */
+/**
+ * Validates the `:userToken` route parameter against the persisted users map
+ * and attaches the matching InstanceProfile to `req.user`.
+ *
+ * Returns 401 when the token is missing or unknown.
+ */
 @Injectable()
 export class InstanceProfileGuard implements CanActivate {
-  constructor(private readonly userService: UserService) {}
+  constructor(private readonly instanceConfig: InstanceConfigService) {}
 
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<Request>();
-    request.user = this.userService.getProfile();
+    const userToken = request.params?.userToken as string | undefined;
+
+    if (!userToken) {
+      throw new UnauthorizedException("Missing user token");
+    }
+
+    const entry = this.instanceConfig.getUserByToken(userToken);
+    if (!entry) {
+      throw new UnauthorizedException("Invalid user token");
+    }
+
+    request.user = this.instanceConfig.getProfile(userToken);
     return true;
   }
 }
