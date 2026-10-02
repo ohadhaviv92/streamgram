@@ -4,7 +4,7 @@
   <img src="https://img.shields.io/badge/Node.js-20+-339933?logo=node.js&logoColor=white" alt="Node.js 20+">
   <img src="https://img.shields.io/badge/pnpm-10.11.0-F69220?logo=pnpm&logoColor=white" alt="pnpm 10.11.0">
   <img src="https://img.shields.io/badge/NestJS-10-E0234E?logo=nestjs&logoColor=white" alt="NestJS 10">
-  <img src="https://img.shields.io/badge/License-MIT-blue" alt="MIT License">
+  <img src="https://img.shields.io/badge/License-GPLv3-blue" alt="GPLv3 License">
   <img src="https://img.shields.io/badge/Stremio-Addon-8A05BE?logo=stremio&logoColor=white" alt="Stremio Addon">
   <a href="https://t.me/+fqC5RbLhPKw4MTQ8"><img src="https://img.shields.io/badge/Telegram-Community-2CA5E0?logo=telegram&logoColor=white" alt="Telegram Community"></a>
 </p>
@@ -16,9 +16,7 @@
 </p>
 
 <p align="center">
-  <strong>TG2Stream is a self-hosted Stremio addon that turns your Telegram account into a personal streaming library.<br><br>
-  Open any movie or episode in Stremio — TG2Stream searches <em>globally</em> across your connected Telegram account and streams the matching video directly to your player.<br>
-  You can also pick specific Telegram channels, groups, or folders to appear as <strong>native browsable catalogs</strong> inside Stremio — scroll and play your collection like a library.<br>
+  <strong>TG2Stream is an advanced, self-hosted addon for Stremio-like apps that serves as a direct bridge between your personal Telegram account and your streaming environment. Operating via a dedicated proxy server, it seamlessly searches your Telegram account in real-time, returning direct playback links for smooth, stable streaming—without requiring full file downloads. Open any movie or episode in your Stremio-like app, or map your specific Telegram folders and channels into a dynamic native catalog to browse your collection just like a personal VOD library.</strong>
 </p>
 
 ---
