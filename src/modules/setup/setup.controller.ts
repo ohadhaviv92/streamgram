@@ -8,6 +8,8 @@ import {
   Req,
   Res,
   BadRequestException,
+  Headers,
+  UnauthorizedException,
 } from "@nestjs/common";
 import { Request, Response } from "express";
 import { InstanceConfigService } from "../user/instance-config.service";
@@ -49,6 +51,7 @@ export class SetupController {
     return {
       setupComplete: this.instanceConfig.isSetupComplete(),
       missing: this.instanceConfig.getMissingFields(),
+      passwordRequired: !this.instanceConfig.verifyAdminPassword(""), // True if a password is set
       publicUrl: config.publicUrl || null,
       apiId: config.telegram.apiId || null,
       apiHashPrefix: this.maskSecret(config.telegram.apiHash),
@@ -68,12 +71,26 @@ export class SetupController {
     };
   }
 
+  @Post("verify-password")
+  @HttpCode(HttpStatus.OK)
+  async verifyPassword(@Headers("x-admin-password") adminPassword?: string) {
+    if (!this.instanceConfig.verifyAdminPassword(adminPassword)) {
+      throw new UnauthorizedException("Invalid or missing admin password");
+    }
+    return { success: true };
+  }
+
   @Post("config")
   @HttpCode(HttpStatus.OK)
   async saveConfig(
     @Body() body: SetupConfigDto,
     @Req() request: Request,
+    @Headers("x-admin-password") adminPassword?: string,
   ) {
+    if (!this.instanceConfig.verifyAdminPassword(adminPassword)) {
+      throw new UnauthorizedException("Invalid or missing admin password");
+    }
+
     const publicUrl = body.publicUrl || this.detectPublicUrl(request);
     if (publicUrl) {
       let parsed: URL;
@@ -99,7 +116,13 @@ export class SetupController {
 
 
   @Get("config/export")
-  async exportConfig(@Res() res: Response): Promise<void> {
+  async exportConfig(
+    @Res() res: Response,
+    @Headers("x-admin-password") adminPassword?: string,
+  ): Promise<void> {
+    if (!this.instanceConfig.verifyAdminPassword(adminPassword)) {
+      throw new UnauthorizedException("Invalid or missing admin password");
+    }
     const raw = this.instanceConfig.exportRaw();
     const filename = `tg2stream-config-${Date.now()}.json`;
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
@@ -111,7 +134,11 @@ export class SetupController {
   @HttpCode(HttpStatus.OK)
   async importConfig(
     @Body() body: ImportConfigDto,
+    @Headers("x-admin-password") adminPassword?: string,
   ): Promise<{ success: boolean; message: string }> {
+    if (!this.instanceConfig.verifyAdminPassword(adminPassword)) {
+      throw new UnauthorizedException("Invalid or missing admin password");
+    }
     await this.instanceConfig.importRaw(body);
     return {
       success: true,

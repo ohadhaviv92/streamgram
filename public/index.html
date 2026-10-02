@@ -383,6 +383,37 @@
         text-align: left; /* Keep URLs LTR even in RTL mode */
         direction: ltr;
       }
+      .modal {
+        display: none;
+        position: fixed;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.6);
+        z-index: 1000;
+        align-items: center;
+        justify-content: center;
+      }
+      .modal.show {
+        display: flex;
+      }
+      .modal-content {
+        background: #0d1117;
+        border: 1px solid #30363d;
+        border-radius: 6px;
+        padding: 24px;
+        width: 100%;
+        max-width: 400px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      }
+      .modal h3 {
+        margin-top: 0;
+        margin-bottom: 16px;
+      }
+      .modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
+        margin-top: 20px;
+      }
     </style>
   </head>
   <body>
@@ -485,6 +516,17 @@
               <option value="ru">Русский</option>
               <option value="ar">العربية</option>
             </select>
+
+            <label for="admin-password" id="label-admin-password" data-i18n="labelAdminPassword">Admin Password (Optional)</label>
+            <input
+              id="admin-password"
+              type="password"
+              autocomplete="new-password"
+              placeholder="Leave blank for no password"
+            />
+            <p class="muted" data-i18n="descAdminPasswordForm">
+              Protect this configuration tab. If set, it will be required to view or change settings.
+            </p>
             <button data-i18n="btnSaveConfig">Save configuration</button>
           </form>
           <div id="config-status" class="status"></div>
@@ -638,6 +680,19 @@
       <!-- /.tab-shell -->
     </main>
 
+    <div id="password-modal" class="modal">
+      <div class="modal-content">
+        <h3 data-i18n="headAdminPassword">Admin Password Required</h3>
+        <p class="muted" data-i18n="descAdminPassword">Enter the admin password to access configuration.</p>
+        <input type="password" id="admin-password-prompt" placeholder="Password" />
+        <div id="password-error" style="color: #f85149; margin-top: 8px;"></div>
+        <div class="modal-actions">
+          <button class="secondary" onclick="closePasswordModal()" data-i18n="btnCancel">Cancel</button>
+          <button id="password-submit" onclick="submitPasswordModal()" data-i18n="btnSubmit">Submit</button>
+        </div>
+      </div>
+    </div>
+
     <div id="copy-toast">✓ Manifest URL copied to clipboard</div>
 
     <script>
@@ -697,6 +752,12 @@
           backupWarning: "⚠️ The export file contains sensitive secrets. Keep it private and protect this page at the network/proxy level.",
           btnExport: "Export config.json",
           btnImport: "Import config.json",
+          labelAdminPassword: "Admin Password (Optional)",
+          descAdminPasswordForm: "Protect this configuration tab. If set, it will be required to view or change settings.",
+          headAdminPassword: "Admin Password Required",
+          descAdminPassword: "Enter the admin password to access configuration.",
+          btnCancel: "Cancel",
+          btnSubmit: "Submit",
         },
         he: {
           descMain: "התקנה פרטית וייעודית לשרת שלך. הסשן לטלגרם ומפתחות ה-API נשארים בשרת זה.",
@@ -750,6 +811,12 @@
           backupWarning: "⚠️ קובץ הייצוא מכיל סודות רגישים. שמור עליו פרטי והגן על דף זה ברמת הרשת/פרוקסי.",
           btnExport: "ייצא config.json",
           btnImport: "ייבא config.json",
+          labelAdminPassword: "סיסמת מנהל (אופציונלי)",
+          descAdminPasswordForm: "הגן על לשונית ההגדרות. אם הוגדר, יידרש כדי לצפות או לשנות הגדרות.",
+          headAdminPassword: "נדרשת סיסמת מנהל",
+          descAdminPassword: "הזן את סיסמת המנהל כדי לגשת להגדרות.",
+          btnCancel: "ביטול",
+          btnSubmit: "שלח",
         }
       };
 
@@ -771,6 +838,7 @@
       }
 
       let setupStatus = null;
+      let adminPassword = "";
       let qrToken = null;
       let qrTimer = null;
       let activeToken = null;
@@ -795,12 +863,16 @@
         $(id).classList.toggle("hidden", !visible);
       }
       async function api(path, options = {}) {
+        const headers = {
+          "Content-Type": "application/json",
+          ...(options.headers || {}),
+        };
+        if (adminPassword && !headers["X-Admin-Password"]) {
+          headers["X-Admin-Password"] = adminPassword;
+        }
         const response = await fetch(path, {
           credentials: "same-origin",
-          headers: {
-            "Content-Type": "application/json",
-            ...(options.headers || {}),
-          },
+          headers,
           ...options,
         });
         const data = await response.json().catch(() => ({}));
@@ -849,9 +921,47 @@
         });
       }
 
+      let pendingTab = null;
       document.querySelectorAll(".tab-btn").forEach((btn) => {
-        btn.addEventListener("click", () => activateTab(btn.dataset.tab));
+        btn.addEventListener("click", () => {
+          const tab = btn.dataset.tab;
+          if ((tab === "config" || tab === "backup") && setupStatus?.passwordRequired && !adminPassword) {
+            pendingTab = tab;
+            $("password-modal").classList.add("show");
+          } else {
+            activateTab(tab);
+          }
+        });
       });
+
+      function closePasswordModal() {
+        $("password-modal").classList.remove("show");
+        $("admin-password-prompt").value = "";
+        $("password-error").textContent = "";
+        pendingTab = null;
+      }
+
+      async function submitPasswordModal() {
+        const pwd = $("admin-password-prompt").value;
+        const btn = $("password-submit");
+        setBusy(btn, true);
+        $("password-error").textContent = "";
+        try {
+          const res = await fetch("/setup/verify-password", {
+            method: "POST",
+            headers: { "X-Admin-Password": pwd }
+          });
+          if (!res.ok) throw new Error("Invalid password");
+          adminPassword = pwd;
+          const target = pendingTab || "config";
+          closePasswordModal();
+          activateTab(target);
+        } catch (e) {
+          $("password-error").textContent = e.message;
+        } finally {
+          setBusy(btn, false);
+        }
+      }
 
       function setTabDone(name, done) {
         const checkEl = $(`check-${name}`);
@@ -878,7 +988,7 @@
         const telegramDone = status?.telegramAuthenticated === true;
         if (!configDone) return "config";
         if (!telegramDone) return "telegram";
-        return "config";
+        return "telegram";
       }
 
       // ── Source rendering ─────────────────────────────────────────────────────
@@ -1123,7 +1233,13 @@
             loadSources();
           }
         } else {
-          activateTab(resolveDefaultTab(setupStatus));
+          const defaultTab = resolveDefaultTab(setupStatus);
+          if ((defaultTab === "config" || defaultTab === "backup") && setupStatus.passwordRequired && !adminPassword) {
+            pendingTab = defaultTab;
+            $("password-modal").classList.add("show");
+          } else {
+            activateTab(defaultTab);
+          }
         }
       }
 
@@ -1139,6 +1255,7 @@
             apiHash: $("api-hash").value.trim() || undefined,
             tmdbBearerToken: $("tmdb-token").value.trim() || undefined,
             preferredLanguage: $("language").value,
+            adminPassword: $("admin-password").value || undefined,
           };
           const data = await api("/setup/config", {
             method: "POST",
@@ -1155,6 +1272,9 @@
               ? "Configuration saved. Connect Telegram to finish setup."
               : `Still missing: ${data.missing.join(", ")}`;
           showMessage("Configuration saved.", "success");
+          if (body.adminPassword) {
+            adminPassword = body.adminPassword;
+          }
           await loadStatus();
           // loadStatus → resolveDefaultTab handles navigation automatically
         } catch (error) {
@@ -1378,8 +1498,11 @@
         setBusy(button, true);
         $("backup-status").textContent = "";
         try {
+          const headers = {};
+          if (adminPassword) headers["X-Admin-Password"] = adminPassword;
           const response = await fetch("/setup/config/export", {
             credentials: "same-origin",
+            headers,
           });
           if (!response.ok)
             throw new Error(`Export failed (${response.status})`);

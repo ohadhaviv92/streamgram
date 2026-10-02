@@ -7,6 +7,7 @@ import {
 import { ConfigService } from "@nestjs/config";
 import * as fs from "fs";
 import * as path from "path";
+import * as crypto from "crypto";
 import { logger } from "../../logger";
 import {
   EffectiveInstanceConfig,
@@ -24,6 +25,7 @@ export interface SetupConfigPatch {
   tmdbBearerToken?: string;
   preferredLanguage?: SupportedLanguage;
   phone?: string;
+  adminPassword?: string;
 }
 
 @Injectable()
@@ -190,6 +192,17 @@ export class InstanceConfigService implements OnModuleInit {
     }
   }
 
+  verifyAdminPassword(password?: string): boolean {
+    if (!this.persisted.adminPasswordHash) {
+      return true; // No password set
+    }
+    if (!password) {
+      return false; // Password required but not provided
+    }
+    const hash = crypto.createHash("sha256").update(password).digest("hex");
+    return hash === this.persisted.adminPasswordHash;
+  }
+
   isSetupComplete(): boolean {
     const config = this.getConfig();
     const hasUser = Object.keys(this.persisted.users ?? {}).length > 0;
@@ -232,6 +245,16 @@ export class InstanceConfigService implements OnModuleInit {
     }
     if (patch.preferredLanguage !== undefined) {
       next.preferredLanguage = patch.preferredLanguage;
+    }
+    if (patch.adminPassword !== undefined) {
+      if (patch.adminPassword === "") {
+        next.adminPasswordHash = undefined;
+      } else {
+        next.adminPasswordHash = crypto
+          .createHash("sha256")
+          .update(patch.adminPassword)
+          .digest("hex");
+      }
     }
 
     this.persisted = next;

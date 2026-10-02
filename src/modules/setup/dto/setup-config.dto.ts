@@ -21,4 +21,8 @@ export class SetupConfigDto {
   @IsOptional()
   @IsIn(["en", "he", "ru", "ar"])
   preferredLanguage?: "en" | "he" | "ru" | "ar";
+
+  @IsOptional()
+  @IsString()
+  adminPassword?: string;
 }

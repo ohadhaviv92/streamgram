@@ -37,6 +37,7 @@ export interface InstanceProfile {
 }
 
 export interface PersistedInstanceConfig {
+  adminPasswordHash?: string;
   publicUrl?: string;
   telegram?: {
     apiId?: number;
