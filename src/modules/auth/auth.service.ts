@@ -432,7 +432,7 @@ export class AuthService {
         "Make sure you're logged into Telegram on your phone",
         "QR code expires after 60 seconds for security",
         "You can generate a new QR code if the current one expires",
-        "The QR code links your TG2Stream session to your Telegram account",
+        "The QR code links your Tg2Stream session to your Telegram account",
       ],
       troubleshooting: [
         "If the QR code doesn't scan, try increasing your screen brightness",

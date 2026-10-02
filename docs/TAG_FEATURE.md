@@ -125,7 +125,7 @@ The Interactive Tag Assistant label adapts to your configured language:
 
 ```typescript
 {
-  name: "TG2Stream\n🏷️ Send Tag to Saved Messages",
+  name: "Tg2Stream\n🏷️ Send Tag to Saved Messages",
   title: "/tag tt0108778:1:1",
   url: "https://yourdomain.com/tag/tt0108778%3A1%3A1",
   behaviorHints: { notWebReady: true }

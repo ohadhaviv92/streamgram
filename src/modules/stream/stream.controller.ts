@@ -90,7 +90,7 @@ export class StreamController {
     return {
       id: "community.telegram-stream-addon",
       version: "1.1.0",
-      name: `TG2Stream ${nodeEnv === "development" ? "(Dev)" : ""}`,
+      name: `Tg2Stream ${nodeEnv === "development" ? "(Dev)" : ""}`,
       description:
         "Search and stream movies/series directly from Telegram. Access your Telegram folders and channels in Stremio.",
       logo: "https://i.ibb.co/nW2xb18/image-out.png",

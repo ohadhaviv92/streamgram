@@ -1,7 +1,7 @@
 import pino from "pino";
 
 export const logger = pino({
-  name: "tg-to-stream",
+  name: "tg2stream",
   level: "info",
   transport:
     process.env.NODE_ENV !== "production"

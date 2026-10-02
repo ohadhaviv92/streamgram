@@ -19,7 +19,7 @@ export interface UserEntry {
 }
 
 /**
- * The single profile owned by one TG2Stream installation (one user).
+ * The single profile owned by one Tg2Stream installation (one user).
  *
  * Keeps the existing snake_case field names used by streaming code while
  * reflecting the per-user token and session from the users map.

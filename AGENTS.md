@@ -1,6 +1,6 @@
-# TG2Stream Agent Instructions
+# Tg2Stream Agent Instructions
 
-TG2Stream is a self-hosted NestJS application that performs global media search across public Telegram channels/groups and streams video files directly from Telegram to Stremio clients.
+Tg2Stream is a self-hosted NestJS application that performs global media search across public Telegram channels/groups and streams video files directly from Telegram to Stremio clients.
 
 ## Quick Start
 

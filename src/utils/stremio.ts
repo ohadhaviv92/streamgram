@@ -184,7 +184,7 @@ export function formatStreamForStremio(
     .preferredLanguage as keyof typeof config.language.languages;
   const langConfig = config.language.languages[preferredLangKey];
 
-  const metadataParts = ["TG2Stream"];
+  const metadataParts = ["Tg2Stream"];
   if (quality) metadataParts.push(quality);
   if (metadata.hasSubtitles)
     metadataParts.push((langConfig as any).subtitleLabel);
@@ -319,7 +319,7 @@ export function createHowToTagStream(
   }
 
   return {
-    name: `TG2Stream\n🏷️ ${(langConfig as any).howToTagLabel}`,
+    name: `Tg2Stream\n🏷️ ${(langConfig as any).howToTagLabel}`,
     title: tagTitle,
     url: tagUrl,
     behaviorHints: { notWebReady: false },

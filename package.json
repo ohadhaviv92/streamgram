@@ -1,5 +1,5 @@
 {
-  "name": "tg-to-stream",
+  "name": "tg2stream",
   "version": "0.1.0",
   "description": "Telegram streaming service rewritten in TypeScript using GramJS",
   "packageManager": "pnpm@10.11.0",

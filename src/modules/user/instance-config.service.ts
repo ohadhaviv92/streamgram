@@ -47,7 +47,7 @@ export class InstanceConfigService implements OnModuleInit {
         {
           missing: this.getMissingFields(),
         },
-        "TG2Stream is waiting for first-run setup",
+        "Tg2Stream is waiting for first-run setup",
       );
     }
   }

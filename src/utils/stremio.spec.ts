@@ -90,7 +90,7 @@ describe("Stremio Utilities", () => {
           "test-token-123",
         );
 
-        expect(result.name).toBe("TG2Stream\n🏷️ How to Tag");
+        expect(result.name).toBe("Tg2Stream\n🏷️ How to Tag");
         expect(result.title).toBe("/tag tt0120855");
         expect(result.url).toBe(
           "https://test.example.com/tag/tt0120855",
@@ -119,7 +119,7 @@ describe("Stremio Utilities", () => {
           "test-token-123",
         );
 
-        expect(result.name).toBe("TG2Stream\n🏷️ How to Tag");
+        expect(result.name).toBe("Tg2Stream\n🏷️ How to Tag");
         expect(result.title).toBe("/tag tt0120855");
         expect(result.url).toBe(
           "https://test.example.com/tag/tt0120855",
@@ -148,7 +148,7 @@ describe("Stremio Utilities", () => {
           "test-token-123",
         );
 
-        expect(result.name).toBe("TG2Stream\n🏷️ איך לתייג");
+        expect(result.name).toBe("Tg2Stream\n🏷️ איך לתייג");
         expect(result.title).toBe("/tag tt0120855");
         expect(result.url).toBe(
           "https://test.example.com/tag/tt0120855",
@@ -177,7 +177,7 @@ describe("Stremio Utilities", () => {
           "test-token-123",
         );
 
-        expect(result.name).toBe("TG2Stream\n🏷️ איך לתייג");
+        expect(result.name).toBe("Tg2Stream\n🏷️ איך לתייג");
         expect(result.title).toBe("/tag tt0120855");
         expect(result.url).toBe(
           "https://test.example.com/tag/tt0120855",
@@ -232,7 +232,7 @@ describe("Stremio Utilities", () => {
           "test-token-123",
         );
 
-        expect(result.name).toBe("TG2Stream\n🏷️ How to Tag");
+        expect(result.name).toBe("Tg2Stream\n🏷️ How to Tag");
         expect(result.title).toBe("/tag tt0108778:1:1");
         expect(result.url).toBe(
           "https://test.example.com/tag/tt0108778%3A1%3A1",
@@ -261,7 +261,7 @@ describe("Stremio Utilities", () => {
           "test-token-123",
         );
 
-        expect(result.name).toBe("TG2Stream\n🏷️ איך לתייג");
+        expect(result.name).toBe("Tg2Stream\n🏷️ איך לתייג");
         expect(result.title).toBe("/tag tt0108778:1:1");
         expect(result.url).toBe(
           "https://test.example.com/tag/tt0108778%3A1%3A1",
@@ -289,7 +289,7 @@ describe("Stremio Utilities", () => {
           "test-token-123",
         );
 
-        expect(result.name).toBe("TG2Stream\n🏷️ Как отметить");
+        expect(result.name).toBe("Tg2Stream\n🏷️ Как отметить");
         expect(result.title).toBe("/tag Friends s02e15\n/tag Друзья с02э15");
       });
 
@@ -314,7 +314,7 @@ describe("Stremio Utilities", () => {
           "test-token-123",
         );
 
-        expect(result.name).toBe("TG2Stream\n🏷️ كيفية الوسم");
+        expect(result.name).toBe("Tg2Stream\n🏷️ كيفية الوسم");
         expect(result.title).toBe("/tag Friends s03e05\n/tag الأصدقاء م03ح05");
       });
 
@@ -363,7 +363,7 @@ describe("Stremio Utilities", () => {
           "test-token-123",
         );
 
-        expect(result.name).toBe("TG2Stream\n🏷️ איך לתייג");
+        expect(result.name).toBe("Tg2Stream\n🏷️ איך לתייג");
         expect(result.title).toBe("/tag Friends s01e01\nאין כותרת בעברית");
       });
     });
@@ -390,7 +390,7 @@ describe("Stremio Utilities", () => {
           "test-token-123",
         );
 
-        expect(result.name).toBe("TG2Stream\n🏷️ How to Tag");
+        expect(result.name).toBe("Tg2Stream\n🏷️ How to Tag");
         expect(result.title).toBe("/tag Tarzan 1999");
       });
 
@@ -468,7 +468,7 @@ describe("Stremio Utilities", () => {
             "tt0120855",
             "test-token-123",
           );
-          expect(result.name).toMatch(/^TG2Stream\n🏷️ /);
+          expect(result.name).toMatch(/^Tg2Stream\n🏷️ /);
         });
       });
 
