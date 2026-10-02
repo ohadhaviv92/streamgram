@@ -27,7 +27,7 @@
 - [Deploy on InstaPods](#deploy-on-instapods)
 - [Local Installation](#local-installation)
 - [Docker](#docker)
-- [First-Run Setup](#first-run-setup)
+- [Server Configuration & Setup](#server-configuration--setup)
 - [Tag Any Video to a Catalog Item](#tag-any-video-to-a-catalog-item)
 - [Environment Variables](#environment-variables)
 - [HTTPS with Caddy](#https-with-caddy)
@@ -138,16 +138,18 @@ Add `--env-file .env` to `docker run` when supplying environment variables inste
 
 ---
 
-## First-Run Setup
+## Server Configuration & Setup
 
 1. **Set the public URL.** Enter the public URL of this bridge. Stremio and many compatible clients require HTTPS for streaming, so use Caddy, Nginx, or another TLS reverse proxy for public deployments.
 2. **Create Telegram API credentials** at [my.telegram.org](https://my.telegram.org) and enter the API ID and hash.
 3. **Create a TMDB token** in [TMDB API settings](https://www.themoviedb.org/settings/api) and enter the v4 Read Access Token.
-4. **Authenticate** the Telegram account by QR code or phone code. If Telegram 2FA is enabled, the wizard asks for the password without storing it.
-5. **Select sources.** Load and select the Telegram folders, groups, and channels to search, then save the selection. **This step is required** — without at least one source selected, all searches will return zero results and no streams will be available.
-6. **Install the addon.** Copy the generated `https://your-domain/manifest.json` URL into Stremio or another compatible client.
+4. **Set an Admin Password (Optional).** Secure your setup wizard by configuring an admin password. Once set, it will be required for any future configuration changes.
+5. **Choose a Secondary Language.** The addon searches in English by default. If you need results in another language (e.g., Hebrew, Russian, Arabic), select it as your preferred language in the setup wizard.
+6. **Authenticate** the Telegram account by QR code or phone code. If Telegram 2FA is enabled, the wizard asks for the password without storing it.
+7. **Select sources.** Load and select the Telegram folders, groups, and channels to search, then save the selection. **This step is required** — without at least one source selected, all searches will return zero results and no streams will be available.
+8. **Install the addon.** Copy the generated `https://your-domain/{user_token}/manifest.json` URL into Stremio or another compatible client.
 
-The wizard can be reopened later to refresh source selections or change local configuration. Setup and authentication endpoints are intentionally unauthenticated, so protect the wizard with network access controls or reverse-proxy authentication if the bridge is publicly reachable.
+The wizard can be reopened later to refresh source selections or change local configuration. If you configured an admin password during setup, you will need it to access these settings again.
 
 ---
 
@@ -175,14 +177,14 @@ See the complete [tag feature documentation](docs/TAG_FEATURE.md) for title-base
 
 All values below are optional when using the setup wizard. Environment variables take precedence over values in `data/config.json`.
 
-| Variable                  | Description                                                                                    |
-| ------------------------- | ---------------------------------------------------------------------------------------------- |
-| `PUBLIC_URL`              | Public base URL used to create addon and stream links. `STREAM_HOST` is supported as an alias. |
-| `TELEGRAM_API_ID`         | Telegram API ID from [my.telegram.org](https://my.telegram.org).                               |
-| `TELEGRAM_API_HASH`       | Telegram API hash from [my.telegram.org](https://my.telegram.org).                             |
-| `TMDB_BEARER_TOKEN`       | TMDB v4 Read Access Token.                                                                     |
-| `PREFERRED_LANGUAGE`      | `en`, `he`, `ru`, or `ar`; defaults to `he`.                                                   |
-| `PORT`                    | HTTP port; defaults to `3000`.                                                                 |
+| Variable             | Description                                                                                    |
+| -------------------- | ---------------------------------------------------------------------------------------------- |
+| `PUBLIC_URL`         | Public base URL used to create addon and stream links. `STREAM_HOST` is supported as an alias. |
+| `TELEGRAM_API_ID`    | Telegram API ID from [my.telegram.org](https://my.telegram.org).                               |
+| `TELEGRAM_API_HASH`  | Telegram API hash from [my.telegram.org](https://my.telegram.org).                             |
+| `TMDB_BEARER_TOKEN`  | TMDB v4 Read Access Token.                                                                     |
+| `PREFERRED_LANGUAGE` | `en`, `he`, `ru`, or `ar`; defaults to `he`.                                                   |
+| `PORT`               | HTTP port; defaults to `3000`.                                                                 |
 
 ---
 
