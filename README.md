@@ -180,7 +180,6 @@ All values below are optional when using the setup wizard. Environment variables
 | `PUBLIC_URL`              | Public base URL used to create addon and stream links. `STREAM_HOST` is supported as an alias. |
 | `TELEGRAM_API_ID`         | Telegram API ID from [my.telegram.org](https://my.telegram.org).                               |
 | `TELEGRAM_API_HASH`       | Telegram API hash from [my.telegram.org](https://my.telegram.org).                             |
-| `TELEGRAM_SESSION_STRING` | Existing GramJS session string. If omitted, use the setup wizard login.                        |
 | `TMDB_BEARER_TOKEN`       | TMDB v4 Read Access Token.                                                                     |
 | `PREFERRED_LANGUAGE`      | `en`, `he`, `ru`, or `ar`; defaults to `he`.                                                   |
 | `PORT`                    | HTTP port; defaults to `3000`.                                                                 |

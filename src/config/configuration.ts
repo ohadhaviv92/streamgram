@@ -2,7 +2,6 @@ export default () => ({
   telegram: {
     apiId: parseInt(process.env.TELEGRAM_API_ID || "0", 10),
     apiHash: process.env.TELEGRAM_API_HASH || "",
-    sessionString: process.env.TELEGRAM_SESSION_STRING || "",
   },
   server: {
     host: "0.0.0.0",
