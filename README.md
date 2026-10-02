@@ -30,7 +30,6 @@
 - [Server Configuration & Setup](#server-configuration--setup)
 - [Tag Any Video to a Catalog Item](#tag-any-video-to-a-catalog-item)
 - [Environment Variables](#environment-variables)
-- [HTTPS with Caddy](#https-with-caddy)
 - [Disclaimer](#disclaimer)
 
 ---
@@ -93,18 +92,27 @@ InstaPods is the easiest way to self-host TG2Stream — no server setup, no term
 - 💡 TG2Stream is lightweight. A **\$3/month pod** handles a single user perfectly — meaning your free credit covers **3+ months** at no cost.
 - ⏸️ **Pay as you go** — stop the pod at any time and billing stops immediately. No hidden fees, cancel whenever you want.
 - 🔒 **HTTPS included** — no domain or TLS setup needed. InstaPods gives you a public HTTPS URL automatically, which is required for Stremio streaming.
+- 🚀 **No bandwidth limit** — stream as much as you want without worrying about data caps.
+
+**Installation Guide:**
+
+1. Click on the **Deploy on InstaPods** button above.
+2. Login or create an account if you aren't logged in.
+3. Wait about 30 seconds while it analyzes the repository.
+4. Click on the **Continue** button (no need to fill the environment variables now).
+5. Select the closest region (EU/US).
+6. Choose a plan (the **Launch plan - \$3/month** is enough for a single user).
+7. If you haven't set up a payment method yet, click **Continue to Payment**. Once added, you will receive a \$10 free credit!
+8. Press the **Deploy Now** button.
+9. Wait about 1 minute for the build to finish and for the deploy to be marked as successful.
+10. Switch to the **Overview** tab and press **Visit Site**. This will open the server admin panel.
+11. Configure the server and connect your Telegram account.
+12. Enjoy!
 
 ---
 
 ## Local Installation
 
-### Prerequisites
-
-- Node.js 20 or newer
-- Telegram API credentials from [my.telegram.org](https://my.telegram.org)
-- A TMDB v4 Read Access Token from [TMDB API settings](https://www.themoviedb.org/settings/api)
-
-### Install, Build, and Run
 
 ```bash
 git clone https://github.com/ohadhaviv92/tg-to-stream.git
@@ -117,7 +125,6 @@ npm run start
 
 ## Docker
 
-On a server with Docker:
 
 ```bash
 git clone https://github.com/ohadhaviv92/tg-to-stream.git
@@ -136,11 +143,9 @@ Add `--env-file .env` to `docker run` when supplying environment variables inste
 
 ---
 
----
-
 ## Server Configuration & Setup
 
-1. **Set the public URL.** Enter the public URL of this bridge. Stremio and many compatible clients require HTTPS for streaming, so use Caddy, Nginx, or another TLS reverse proxy for public deployments.
+1. **Set the public URL.** Enter the public URL of this bridge. Stremio and many compatible clients require HTTPS for streaming, so use a TLS reverse proxy like Nginx for public deployments.
 2. **Create Telegram API credentials** at [my.telegram.org](https://my.telegram.org) and enter the API ID and hash.
 3. **Create a TMDB token** in [TMDB API settings](https://www.themoviedb.org/settings/api) and enter the v4 Read Access Token.
 4. **Set an Admin Password (Optional).** Secure your setup wizard by configuring an admin password. Once set, it will be required for any future configuration changes.
@@ -185,20 +190,6 @@ All values below are optional when using the setup wizard. Environment variables
 | `TMDB_BEARER_TOKEN`  | TMDB v4 Read Access Token.                                                                     |
 | `PREFERRED_LANGUAGE` | `en`, `he`, `ru`, or `ar`; defaults to `he`.                                                   |
 | `PORT`               | HTTP port; defaults to `3000`.                                                                 |
-
----
-
-## HTTPS with Caddy
-
-Point a DNS record at the server and use a Caddyfile like this:
-
-```caddy
-stream.example.com {
-  reverse_proxy 127.0.0.1:3000
-}
-```
-
-Then open `https://stream.example.com/`, enter that URL in the setup wizard, and install `https://stream.example.com/manifest.json` in Stremio or another compatible client. Do not expose the Node.js port directly to the public internet once the reverse proxy is configured.
 
 ---
 
