@@ -830,7 +830,7 @@ export class StreamController {
       const isFusion = userAgent.startsWith("DiffusionApp");
       const isaArvio = userAgent.startsWith("stagefright");
       // Limit range to maximum 5MB per request
-      const maxChunkSize = 5 * 1024 * 1024; // 5MB
+      const maxChunkSize = 10 * 1024 * 1024; // 5MB
       if (!isFusion && !isaArvio && end - start + 1 > maxChunkSize) {
         end = start + maxChunkSize - 1;
       }
