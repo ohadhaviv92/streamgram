@@ -1,4 +1,4 @@
-![StreamGram logo](https://t.me/AddonStreamGram)
+![StreamGram logo](https://i.ibb.co/DP58XXk7/logo-banner-transparent.png)
 
 <p align="center">
   <img src="https://img.shields.io/badge/Node.js-20+-339933?logo=node.js&logoColor=white" alt="Node.js 20+">
