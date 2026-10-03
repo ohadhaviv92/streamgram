@@ -31,7 +31,7 @@ See [README.md](README.md#environment-variables) for full environment variable d
 ### Tech Stack
 
 - **Framework**: NestJS 10.x with TypeScript 5.6
-- **Telegram**: GramJS (telegram package v2.20+)
+- **Telegram**: teleproto
 - **Media Metadata**: TMDB API
 - **Caching**: cache-manager with in-memory store
 - **Logging**: Pino

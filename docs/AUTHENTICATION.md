@@ -17,7 +17,7 @@ POST /auth/send-code   { "phone": "+15551234567" }
 POST /auth/verify-code { "phone": "+15551234567", "code": "12345", "password": "optional-2fa" }
 ```
 
-The temporary phone-code hash and temporary session are held in the in-memory cache. After successful verification, the final GramJS session string is written to `data/config.json`.
+The temporary phone-code hash and temporary session are held in the in-memory cache. After successful verification, the final Telegram session string is written to `data/config.json`.
 
 ## Telegram QR flow
 

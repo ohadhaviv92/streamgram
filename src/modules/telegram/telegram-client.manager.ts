@@ -1,7 +1,7 @@
 import { Injectable, OnApplicationShutdown, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { TelegramClient } from "telegram";
-import { StringSession } from "telegram/sessions";
+import { TelegramClient } from "teleproto";
+import { StringSession } from "teleproto/sessions";
 import { logger } from "../../logger";
 import { InstanceConfigService } from "../user/instance-config.service";
 
@@ -213,7 +213,6 @@ export class TelegramClientManager implements OnApplicationShutdown {
         connectionRetries: 3,
         downloadRetries: 2,
         maxConcurrentDownloads: 5,
-        useWSS: true,
         floodSleepThreshold: 60,
         requestRetries: 2,
         timeout: 30,

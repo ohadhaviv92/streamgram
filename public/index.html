@@ -552,6 +552,7 @@
             Load folders and channels
           </button>
           <div id="load-sources-status" class="status"></div>
+          <div id="sources-area" class="hidden">
           <div class="grid">
             <div>
               <h3 data-i18n="headFolders">Folders</h3>
@@ -575,6 +576,7 @@
           </div>
           <button id="save-sources" data-i18n="btnSaveSources">Save selected sources</button>
           <div id="source-status" class="status"></div>
+          </div>
           </div>
 
           <hr style="border-color: #30363d; margin: 24px 0" />
@@ -610,7 +612,9 @@
             + Add User
           </button>
 
-          <div id="auth-container" class="hidden">
+          <div id="auth-container" class="modal">
+          <div class="modal-content" style="max-height: 90vh; overflow-y: auto;">
+          <h3 data-i18n="btnAddUser">+ Add User</h3>
           <p data-i18n="descTelegram">
             Use QR login from the Telegram mobile app, or use the phone-code
             method if QR is unavailable. StreamGram stores only the resulting
@@ -647,6 +651,10 @@
             <button data-i18n="btnVerifyCode">Verify Telegram code</button>
           </form>
           <div id="auth-status" class="status"></div>
+          <div class="modal-actions">
+            <button id="auth-close" type="button" class="secondary">Close</button>
+          </div>
+          </div>
           </div>
         </div>
 
@@ -1086,6 +1094,10 @@
       function renderAccounts() {
         const list = $("accounts-list");
         if (!list) return;
+        const details = $("account-details");
+        if (details && details.parentNode === list) {
+          list.parentNode.insertBefore(details, list.nextSibling);
+        }
         list.innerHTML = "";
         
         if (!setupStatus.users || setupStatus.users.length === 0) {
@@ -1138,13 +1150,14 @@
                 activeToken = u.token;
                 renderAccounts();
                 refreshStremioPanel();
-                loadSources();
                 show("account-details", true);
-                show("auth-container", false);
                 show("add-user-btn", true);
             });
 
             list.appendChild(row);
+            if (activeToken === u.token && details) {
+                list.appendChild(details);
+            }
         });
 
         // Re-attach listeners for dynamically created buttons
@@ -1182,12 +1195,9 @@
             });
         });
         
-        show("auth-container", false);
         show("add-user-btn", true);
         show("auth-separator", true);
-        if(activeToken) {
-            show("account-details", true);
-        }
+        show("account-details", !!activeToken);
       }
 
 
@@ -1230,10 +1240,6 @@
         refreshStremioPanel();
         if (params.get("action") === "settings") {
           activateTab("telegram");
-          show("account-details", true);
-          if (setupStatus.telegramAuthenticated && !foldersLoaded && !channelsLoaded) {
-            loadSources();
-          }
         } else {
           const defaultTab = resolveDefaultTab(setupStatus);
           if ((defaultTab === "config" || defaultTab === "backup") && setupStatus.passwordRequired && !adminPassword) {
@@ -1293,19 +1299,20 @@
 
         if (newToken) {
           activeToken = newToken;
-        } else if (!activeToken && setupStatus.users && setupStatus.users.length > 0) {
-          activeToken = setupStatus.users[0].token;
         }
 
         renderAccounts();
 
-        $("auth-status").textContent =
-          "Telegram authentication completed. Load sources when ready.";
+        $("auth-status").textContent = "";
         setTabDone("telegram", true);
 
         refreshStremioPanel();
-        // Auto-advance to Sources tab after connecting
-        if (newToken) { $("account-details").classList.remove("hidden"); loadSources(); }
+        if (newToken) { closeAuthModal(); $("account-details").classList.remove("hidden"); }
+      }
+
+      function closeAuthModal() {
+        $("auth-container").classList.remove("show");
+        clearInterval(qrTimer);
       }
 
       // ── QR auth ─────────────────────────────────────────────────────────────
@@ -1404,6 +1411,7 @@
         const button = $("load-sources");
         setBusy(button, true);
         $("load-sources-status").textContent = "Loading folders and channels…";
+        show("sources-area", true);
         const tokenParams = activeToken ? "?token=" + activeToken : "";
         const results = await Promise.allSettled([
           api("/folders" + tokenParams, { headers: {} }),
@@ -1586,9 +1594,11 @@
       // ── Wire up forms ────────────────────────────────────────────────────────
       $("config-form").addEventListener("submit", saveConfig);
       $("add-user-btn").addEventListener("click", () => {
-        show("add-user-btn", false);
-        show("auth-container", true);
-        show("account-details", false);
+        $("auth-container").classList.add("show");
+      });
+      $("auth-close").addEventListener("click", closeAuthModal);
+      $("auth-container").addEventListener("click", (e) => {
+        if (e.target === $("auth-container")) closeAuthModal();
       });
       $("qr-button").addEventListener("click", generateQr);
       $("phone-toggle").addEventListener("click", () => {

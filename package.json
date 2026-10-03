@@ -1,7 +1,7 @@
 {
   "name": "streamgram",
   "version": "0.1.0",
-  "description": "Telegram streaming service rewritten in TypeScript using GramJS",
+  "description": "Telegram streaming service rewritten in TypeScript using teleproto",
   "packageManager": "pnpm@10.11.0",
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -42,7 +42,7 @@
     "qrcode": "^1.5.4",
     "reflect-metadata": "^0.1.14",
     "rxjs": "^7.8.2",
-    "telegram": "^2.20.11",
+    "teleproto": "^1.229.1",
     "uuid": "^13.0.0"
   },
   "devDependencies": {

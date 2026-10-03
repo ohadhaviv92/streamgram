@@ -1,18 +1,19 @@
 import { Injectable, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Buffer } from "buffer";
-import { TelegramClient } from "telegram";
-import { Api } from "telegram";
-import { StringSession } from "telegram/sessions";
+import { TelegramClient } from "teleproto";
+import { Api } from "teleproto";
+import { StringSession } from "teleproto/sessions";
+import { Logger, LogLevel } from "teleproto/extensions/Logger";
 import { createInterface } from "readline/promises";
 import { stdin as input, stdout as output } from "process";
 import path from "path";
 import { promises as fs } from "fs";
 //@ts-ignore
-import { Message } from "telegram/tl/custom";
-import { EntityLike } from "telegram/define";
+import { Message } from "teleproto/tl/custom";
+import { EntityLike } from "teleproto/define";
 import bigInt from "big-integer";
-import { computeCheck } from "telegram/Password";
+import { computeCheck } from "teleproto/Password";
 import { CacheService } from "../cache/cache.service";
 import { MediaDetails } from "../tmdb/types";
 import { MediaSearchResult, EpisodeInfo } from "./types";
@@ -369,6 +370,7 @@ export class TelegramNestService {
       telegramConfig.apiHash,
       {
         connectionRetries: 5,
+        baseLogger: new Logger(LogLevel.NONE),
       },
     );
 
@@ -448,17 +450,31 @@ export class TelegramNestService {
       telegramConfig.apiHash,
       {
         connectionRetries: 5,
+        baseLogger: new Logger(LogLevel.NONE),
       },
     );
 
     try {
       await tempClient.connect();
 
-      const result = await tempClient.invoke(
-        new Api.auth.ImportLoginToken({
-          token: token,
+      // Per the Telegram QR login protocol, poll by exporting the token again
+      // with the same session. ImportLoginToken is only valid for a token
+      // received from LoginTokenMigrateTo (a different DC).
+      let result = await tempClient.invoke(
+        new Api.auth.ExportLoginToken({
+          apiId: telegramConfig.apiId,
+          apiHash: telegramConfig.apiHash,
+          exceptIds: [],
         }),
       );
+
+      if (result instanceof Api.auth.LoginTokenMigrateTo) {
+        // The user scanned the code with an account on another DC
+        await tempClient._switchDC(result.dcId);
+        result = await tempClient.invoke(
+          new Api.auth.ImportLoginToken({ token: result.token }),
+        );
+      }
 
       // Check result type
       if (result instanceof Api.auth.LoginToken) {
@@ -481,13 +497,6 @@ export class TelegramNestService {
 
         logger.info("Successfully authorized via QR code");
         return sessionString;
-      } else if (result instanceof Api.auth.LoginTokenMigrateTo) {
-        // Need to migrate to another DC - not implemented yet
-        await tempClient.disconnect();
-        await tempClient.destroy();
-        throw new Error(
-          "Login token migration required. Please contact support.",
-        );
       }
 
       await tempClient.disconnect();
@@ -509,7 +518,10 @@ export class TelegramNestService {
         error.errorMessage === "SESSION_PASSWORD_NEEDED" ||
         error.errorMessage === "AUTH_TOKEN_EXPIRED"
       ) {
-        logger.info("QR code token expired or invalid");
+        logger.info(
+          { errorMessage: error.errorMessage },
+          "QR code token expired or invalid",
+        );
         return null;
       }
 
@@ -1808,25 +1820,23 @@ export class TelegramNestService {
       throw new Error("Message has no downloadable media");
     }
 
-    // Telegram API requires offsets to be strictly aligned to 4KB boundaries
-    const TELEGRAM_OFFSET_ALIGNMENT = 4096;
     const totalBytesToSend = end - start + 1;
-    const fileSize = this.getFileSize(message);
+    const requestSize = this.STREAMING_CONFIG.maxRequestSize; // Typically 1MB
 
-    // Calculate the nearest aligned offset below the requested start point
+    // Telegram's upload.getFile forbids a request from crossing a 1MB boundary,
+    // so with full-size (max) chunks the offset must be aligned to requestSize,
+    // not just to 4KB.
     const alignedOffset =
-      Math.floor(start / TELEGRAM_OFFSET_ALIGNMENT) * TELEGRAM_OFFSET_ALIGNMENT;
+      Math.floor(start / requestSize) * requestSize;
 
     // Calculate the extra bytes we fetched due to alignment (to be discarded later)
     const alignmentPadding = start - alignedOffset;
 
-    // Calculate the total size we actually need to request from Telegram (including padding)
+    // Total size we actually need to request from Telegram (including padding)
     const downloadSize = totalBytesToSend + alignmentPadding;
 
-    const requestSize = this.STREAMING_CONFIG.maxRequestSize; // Typically 1MB
-
-    // Calculate exactly how many chunks of 'requestSize' we need to pull
-    const chunkLimit = Math.max(1, Math.ceil(downloadSize / requestSize));
+    // teleproto's `limit` is expressed in bytes (rounded up to whole chunks)
+    const byteLimit = Math.max(1, downloadSize);
 
     // Define the exact file location payload
     const fileLocation = new Api.InputDocumentFileLocation({
@@ -1838,12 +1848,10 @@ export class TelegramNestService {
 
     // Initialize a single iterator to handle the entire range request.
     // This prevents the CPU-intensive process of opening a new connection for every chunk.
-    const iterator = client.iterDownload({
-      file: fileLocation,
+    const iterator = client.iterDownload(fileLocation, {
       offset: bigInt(alignedOffset),
-      limit: chunkLimit,
+      limit: byteLimit,
       requestSize: requestSize,
-      fileSize: bigInt(fileSize),
       dcId: context.document.dcId,
     });
 
