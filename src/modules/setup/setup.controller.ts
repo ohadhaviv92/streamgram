@@ -53,7 +53,7 @@ export class SetupController {
       missing: this.instanceConfig.getMissingFields(),
       passwordRequired: !this.instanceConfig.verifyAdminPassword(""), // True if a password is set
       publicUrl: config.publicUrl || null,
-      apiId: config.telegram.apiId || null,
+      apiIdPrefix: this.maskApiId(config.telegram.apiId),
       apiHashPrefix: this.maskSecret(config.telegram.apiHash),
       preferredLanguage: config.preferredLanguage,
       telegramConfigured: Boolean(config.telegram.apiId && config.telegram.apiHash),
@@ -163,6 +163,12 @@ export class SetupController {
   private maskSecret(secret: string): string | null {
     const value = secret.trim();
     return value ? `${value.slice(0, 4)}****` : null;
+  }
+
+  private maskApiId(apiId: number | null | undefined): string | null {
+    if (!apiId) return null;
+    const str = String(apiId);
+    return str.length > 3 ? `***${str.slice(-5)}` : `***`;
   }
 
   private phoneLast4(phone: string | null | undefined): string | null {

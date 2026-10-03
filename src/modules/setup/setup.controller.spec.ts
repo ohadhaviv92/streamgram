@@ -17,7 +17,7 @@ function makeInstanceConfig(opts: {
   return {
     getConfig: jest.fn().mockReturnValue({
       publicUrl: "https://stream.example",
-      telegram: { apiId: 123, apiHash: "secret-hash" },
+      telegram: { apiId: 1234567, apiHash: "secret-hash" },
       tmdb: { bearerToken: "secret-token" },
       preferredLanguage: "he",
       phone: null,
@@ -31,6 +31,7 @@ function makeInstanceConfig(opts: {
     ),
     isSetupComplete: jest.fn().mockReturnValue(opts.isComplete ?? true),
     getMissingFields: jest.fn().mockReturnValue(opts.missing ?? []),
+    verifyAdminPassword: jest.fn().mockReturnValue(true),
   } as unknown as InstanceConfigService;
 }
 
@@ -46,8 +47,9 @@ describe("SetupController", () => {
     expect(status).toEqual({
       setupComplete: true,
       missing: [],
+      passwordRequired: false,
       publicUrl: "https://stream.example",
-      apiId: 123,
+      apiIdPrefix: "***34567",
       apiHashPrefix: "secr****",
       preferredLanguage: "he",
       telegramConfigured: true,
@@ -55,10 +57,18 @@ describe("SetupController", () => {
       telegramPhoneLast4: "4567",
       userName: null,
       userToken: "testtoken123",
+      users: [
+        {
+          name: null,
+          phoneLast4: "4567",
+          token: "testtoken123",
+        },
+      ],
       tmdbTokenPrefix: "secr****",
       tmdbConfigured: true,
     });
     expect(telegramService.getTelegramPhone).not.toHaveBeenCalled();
+    expect(status).not.toHaveProperty("apiId");
     expect(status).not.toHaveProperty("apiHash");
     expect(status).not.toHaveProperty("sessionString");
     expect(status).not.toHaveProperty("tmdbBearerToken");

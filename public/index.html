@@ -976,7 +976,7 @@
       function isConfigFieldsDone(status) {
         return !!(
           status?.publicUrl &&
-          status?.apiId &&
+          status?.apiIdPrefix &&
           status?.apiHashPrefix &&
           status?.tmdbTokenPrefix
         );
@@ -1193,6 +1193,8 @@
 
       
       function updateSecretPlaceholders() {
+        $("api-id").placeholder =
+          setupStatus?.apiIdPrefix || "123456";
         $("api-hash").placeholder =
           setupStatus?.apiHashPrefix || "from my.telegram.org";
         $("tmdb-token").placeholder = setupStatus?.tmdbTokenPrefix || "eyJ...";
@@ -1206,7 +1208,7 @@
         clearMessage();
 
         $("public-url").value = setupStatus.publicUrl || location.origin;
-        $("api-id").value = setupStatus.apiId || "";
+        $("api-id").value = "";
         $("language").value = setupStatus.preferredLanguage || "en";
         updateSecretPlaceholders();
 

@@ -1,4 +1,4 @@
-![TGStreamBridge logo](https://i.ibb.co/393S2Z44/SCR-20260928-synh-out.png)
+![StreamGram logo](https://t.me/AddonStreamGram)
 
 <p align="center">
   <img src="https://img.shields.io/badge/Node.js-20+-339933?logo=node.js&logoColor=white" alt="Node.js 20+">
@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/NestJS-10-E0234E?logo=nestjs&logoColor=white" alt="NestJS 10">
   <img src="https://img.shields.io/badge/License-GPLv3-blue" alt="GPLv3 License">
   <img src="https://img.shields.io/badge/Stremio-Addon-8A05BE?logo=stremio&logoColor=white" alt="Stremio Addon">
-  <a href="https://t.me/+fqC5RbLhPKw4MTQ8"><img src="https://img.shields.io/badge/Telegram-Community-2CA5E0?logo=telegram&logoColor=white" alt="Telegram Community"></a>
+  <a href="https://t.me/AddonStreamGram"><img src="https://img.shields.io/badge/Telegram-Community-2CA5E0?logo=telegram&logoColor=white" alt="Telegram Community"></a>
 </p>
 
 <p align="center">
@@ -67,8 +67,8 @@ You can "pin" any Telegram video to a specific IMDB or TMDB catalog item using t
 
 | Mode                | How it's triggered                                                                              | Requires                              |
 | ------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------- |
-| **Stream Provider** | You open a movie or episode in Stremio → StreamGram searches your whole Telegram account         | Just a connected Telegram account     |
-| **Catalog**         | You browse a catalog tab in Stremio → StreamGram lists videos from selected folders/channels     | At least one source selected in setup |
+| **Stream Provider** | You open a movie or episode in Stremio → StreamGram searches your whole Telegram account        | Just a connected Telegram account     |
+| **Catalog**         | You browse a catalog tab in Stremio → StreamGram lists videos from selected folders/channels    | At least one source selected in setup |
 | **Tagged Video**    | You reply `/tag <id>` to a video in Telegram → it's pinned to that catalog item by IMDB/TMDB ID | Accessible Telegram video             |
 
 > [!NOTE]
@@ -113,7 +113,6 @@ InstaPods is the easiest way to self-host StreamGram — no server setup, no ter
 
 ## Local Installation
 
-
 ```bash
 git clone https://github.com/ohadhaviv92/streamgram.git
 cd streamgram
@@ -124,7 +123,6 @@ npm run start
 ---
 
 ## Docker
-
 
 ```bash
 git clone https://github.com/ohadhaviv92/streamgram.git
