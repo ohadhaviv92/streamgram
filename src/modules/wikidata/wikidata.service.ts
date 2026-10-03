@@ -63,7 +63,7 @@ export class WikidataService {
       const response = await fetch(url.toString(), {
         headers: {
           Accept: "application/sparql-results+json",
-          "User-Agent": "Tg2Stream/1.0 (https://github.com/ohadhaviv92/tg2stream)",
+          "User-Agent": "StreamGram/1.0 (https://github.com/ohadhaviv92/streamgram)",
         },
       });
 

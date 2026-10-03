@@ -90,10 +90,10 @@ export class StreamController {
     return {
       id: "community.telegram-stream-addon",
       version: "1.1.0",
-      name: `Tg2Stream ${nodeEnv === "development" ? "(Dev)" : ""}`,
+      name: `StreamGram ${nodeEnv === "development" ? "(Dev)" : ""}`,
       description:
         "Search and stream movies/series directly from Telegram. Access your Telegram folders and channels in Stremio.",
-      logo: "https://i.ibb.co/nW2xb18/image-out.png",
+      logo: "https://i.ibb.co/Hf8xxJbL/logo-icon-transparent.png",
       resources: ["catalog", "meta", "stream"],
       types: ["movie", "series"],
       catalogs: [
@@ -245,7 +245,9 @@ export class StreamController {
 
     try {
       // Get user's selected channel IDs
-      const selectedIds = await this.userService.getSelectedChannels(user.token);
+      const selectedIds = await this.userService.getSelectedChannels(
+        user.token,
+      );
 
       // Transform channel IDs to Stremio metas
       const metas = await Promise.all(
@@ -983,11 +985,19 @@ export class StreamController {
   /**
    * Helper to map Telegram messages to Stremio streams
    */
-  private mapMessagesToStreams(messages: MediaSearchResult[], userToken: string): any[] {
+  private mapMessagesToStreams(
+    messages: MediaSearchResult[],
+    userToken: string,
+  ): any[] {
     return messages
       .slice(0, 50)
       .map((item) =>
-        formatStreamForStremio(userToken, item, undefined, this.getBaseUrl(userToken)),
+        formatStreamForStremio(
+          userToken,
+          item,
+          undefined,
+          this.getBaseUrl(userToken),
+        ),
       )
       .filter((stream) => Boolean(stream));
   }

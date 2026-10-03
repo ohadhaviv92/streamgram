@@ -1,5 +1,5 @@
 {
-  "name": "tg2stream",
+  "name": "streamgram",
   "version": "0.1.0",
   "description": "Telegram streaming service rewritten in TypeScript using GramJS",
   "packageManager": "pnpm@10.11.0",

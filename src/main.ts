@@ -27,7 +27,7 @@ async function bootstrap() {
 
   // Setup Swagger
   const config = new DocumentBuilder()
-    .setTitle("Tg2Stream API")
+    .setTitle("StreamGram API")
     .setDescription("Search and stream movies/series directly from Telegram")
     .setVersion("1.0.0")
     .addTag("Stream", "Stream operations for movies and series")

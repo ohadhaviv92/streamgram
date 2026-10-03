@@ -1,6 +1,6 @@
-# Tg2Stream authentication
+# StreamGram authentication
 
-Tg2Stream has one Telegram identity per installation. There are no application users, signup records, admin approval states, or bearer tokens for Stremio URLs.
+StreamGram has one Telegram identity per installation. There are no application users, signup records, admin approval states, or bearer tokens for Stremio URLs.
 
 ## Browser setup
 

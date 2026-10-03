@@ -124,7 +124,7 @@ export class SetupController {
       throw new UnauthorizedException("Invalid or missing admin password");
     }
     const raw = this.instanceConfig.exportRaw();
-    const filename = `tg2stream-config-${Date.now()}.json`;
+    const filename = `streamgram-config-${Date.now()}.json`;
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     res.setHeader("Content-Type", "application/json");
     res.send(raw);

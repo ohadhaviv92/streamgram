@@ -10,13 +10,13 @@
 </p>
 
 <p align="center">
-  <a href="https://app.instapods.com/dashboard/pods/create?repo=https://github.com/ohadhaviv92/tg2stream&branch=main&ref=tg2stream">
-    <img src="https://instapods.com/deploy-button.svg" alt="Deploy Tg2Stream on InstaPods">
+  <a href="https://app.instapods.com/dashboard/pods/create?repo=https://github.com/ohadhaviv92/streamgram&branch=main&ref=streamgram">
+    <img src="https://instapods.com/deploy-button.svg" alt="Deploy StreamGram on InstaPods">
   </a>
 </p>
 
 <p align="center">
-  <strong>Tg2Stream is an advanced, self-hosted addon for Stremio-like apps that serves as a direct bridge between your personal Telegram account and your streaming environment. Operating via a dedicated proxy server, it seamlessly searches your Telegram account in real-time, returning direct playback links for smooth, stable streaming—without requiring full file downloads. Open any movie or episode in your Stremio-like app, or map your specific Telegram folders and channels into a dynamic native catalog to browse your collection just like a personal VOD library.</strong>
+  <strong>StreamGram is an advanced, self-hosted addon for Stremio-like apps that serves as a direct bridge between your personal Telegram account and your streaming environment. Operating via a dedicated proxy server, it seamlessly searches your Telegram account in real-time, returning direct playback links for smooth, stable streaming—without requiring full file downloads. Open any movie or episode in your Stremio-like app, or map your specific Telegram folders and channels into a dynamic native catalog to browse your collection just like a personal VOD library.</strong>
 </p>
 
 ---
@@ -36,7 +36,7 @@
 
 ## Features
 
-- 🔍 **Global search** — open any movie or episode in Stremio and Tg2Stream searches across your entire connected Telegram account automatically.
+- 🔍 **Global search** — open any movie or episode in Stremio and StreamGram searches across your entire connected Telegram account automatically.
 - 📺 **Stream provider** — returns direct stream links for any title Stremio resolves, no source setup required.
 - 📂 **Catalog addon** — optionally select specific Telegram folders or channels to appear as browsable catalogs inside Stremio, so you can explore and play your library directly.
 - 🔗 Install the bridge using a standard `/manifest.json` addon URL.
@@ -49,11 +49,11 @@
 
 ## How the Addon Works
 
-Tg2Stream connects your Telegram account to Stremio as **two addon types in one**. Here's how each mode works:
+StreamGram connects your Telegram account to Stremio as **two addon types in one**. Here's how each mode works:
 
 ### Stream Provider — On-Demand Global Search
 
-When you open a movie or episode in Stremio, Tg2Stream searches _globally_ across your **entire connected Telegram account** — no source configuration required. It looks for video files whose filenames or captions match the title, using TMDB metadata and multi-language terms to maximize results. Matching files are returned as stream links and played directly from Telegram.
+When you open a movie or episode in Stremio, StreamGram searches _globally_ across your **entire connected Telegram account** — no source configuration required. It looks for video files whose filenames or captions match the title, using TMDB metadata and multi-language terms to maximize results. Matching files are returned as stream links and played directly from Telegram.
 
 **This means:** if the media doesn't exist anywhere in your Telegram account, there will be no results.
 
@@ -67,8 +67,8 @@ You can "pin" any Telegram video to a specific IMDB or TMDB catalog item using t
 
 | Mode                | How it's triggered                                                                              | Requires                              |
 | ------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------- |
-| **Stream Provider** | You open a movie or episode in Stremio → Tg2Stream searches your whole Telegram account         | Just a connected Telegram account     |
-| **Catalog**         | You browse a catalog tab in Stremio → Tg2Stream lists videos from selected folders/channels     | At least one source selected in setup |
+| **Stream Provider** | You open a movie or episode in Stremio → StreamGram searches your whole Telegram account         | Just a connected Telegram account     |
+| **Catalog**         | You browse a catalog tab in Stremio → StreamGram lists videos from selected folders/channels     | At least one source selected in setup |
 | **Tagged Video**    | You reply `/tag <id>` to a video in Telegram → it's pinned to that catalog item by IMDB/TMDB ID | Accessible Telegram video             |
 
 > [!NOTE]
@@ -79,17 +79,17 @@ You can "pin" any Telegram video to a specific IMDB or TMDB catalog item using t
 ## Deploy on InstaPods
 
 <p align="center">
-  <a href="https://app.instapods.com/dashboard/pods/create?repo=https://github.com/ohadhaviv92/tg2stream&branch=main&ref=tg2stream">
-    <img src="https://instapods.com/deploy-button.svg" alt="Deploy Tg2Stream on InstaPods">
+  <a href="https://app.instapods.com/dashboard/pods/create?repo=https://github.com/ohadhaviv92/streamgram&branch=main&ref=streamgram">
+    <img src="https://instapods.com/deploy-button.svg" alt="Deploy StreamGram on InstaPods">
   </a>
 </p>
 
-InstaPods is the easiest way to self-host Tg2Stream — no server setup, no terminal, just click and deploy.
+InstaPods is the easiest way to self-host StreamGram — no server setup, no terminal, just click and deploy.
 
 **Why InstaPods?**
 
 - 🎁 **\$10 free credit** when you add a credit card — no charge until you use it up.
-- 💡 Tg2Stream is lightweight. A **\$3/month pod** handles a single user perfectly — meaning your free credit covers **3+ months** at no cost.
+- 💡 StreamGram is lightweight. A **\$3/month pod** handles a single user perfectly — meaning your free credit covers **3+ months** at no cost.
 - ⏸️ **Pay as you go** — stop the pod at any time and billing stops immediately. No hidden fees, cancel whenever you want.
 - 🔒 **HTTPS included** — no domain or TLS setup needed. InstaPods gives you a public HTTPS URL automatically, which is required for Stremio streaming.
 - 🚀 **No bandwidth limit** — stream as much as you want without worrying about data caps.
@@ -115,8 +115,8 @@ InstaPods is the easiest way to self-host Tg2Stream — no server setup, no term
 
 
 ```bash
-git clone https://github.com/ohadhaviv92/tg2stream.git
-cd tg2stream
+git clone https://github.com/ohadhaviv92/streamgram.git
+cd streamgram
 npm install
 npm run start
 ```
@@ -127,14 +127,14 @@ npm run start
 
 
 ```bash
-git clone https://github.com/ohadhaviv92/tg2stream.git
-cd tg2stream
-docker build -t tg2stream .
-docker run -d --name tg2stream --restart unless-stopped \
+git clone https://github.com/ohadhaviv92/streamgram.git
+cd streamgram
+docker build -t streamgram .
+docker run -d --name streamgram --restart unless-stopped \
   -p 3000:3000 \
   -v ./data:/app/data \
-  tg2stream
-docker logs -f tg2stream
+  streamgram
+docker logs -f streamgram
 ```
 
 Open `http://<server-ip>:3000/` to use the setup wizard. If the bridge is behind a reverse proxy, open the wizard through the public HTTPS domain instead.
@@ -196,6 +196,6 @@ All values below are optional when using the setup wizard. Environment variables
 ## Disclaimer
 
 > [!WARNING]
-> Tg2Stream is a bridge, not a media library. It does not host, upload, or distribute any content. You choose the Telegram sources your account can access and are solely responsible for using this software in compliance with applicable law, copyright permissions, Telegram's Terms of Service, and the terms of your client or provider.
+> StreamGram is a bridge, not a media library. It does not host, upload, or distribute any content. You choose the Telegram sources your account can access and are solely responsible for using this software in compliance with applicable law, copyright permissions, Telegram's Terms of Service, and the terms of your client or provider.
 
 ---
