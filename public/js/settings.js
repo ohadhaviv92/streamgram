@@ -1,3 +1,4 @@
+import { checksCard, bindChecks } from "./checks.js";
 import { t } from "./i18n.js";
 import {
   $,
@@ -43,23 +44,35 @@ export function bindProtection(hasPassword = false) {
 export function renderSettings(data) {
   $("#main").innerHTML =
     `<div class="page-head"><h1>${t("Settings")}</h1></div><section class="card"><div class="card-header"><h2>${t("Instance credentials")}</h2></div><form id="credentials" class="form-width">${credentialFields(data, { showTutorialLink: true })}<button class="primary" style="margin-top:24px">${t("Save changes")}</button></form></section><section class="card"><h2>${t("Admin protection")}</h2><form id="protection-form" class="form-width" style="margin-top:20px">${protectionFields(data)}<button class="primary">${t("Save changes")}</button></form></section><section class="card"><h2>${t("Backup & restore")}</h2><p>${t("Backups contain private Telegram sessions. Store them securely.")}</p><div class="actions"><a class="btn" href="/setup/config/export" download>${t("Download backup")}</a></div><form id="restore-form" class="form-width" style="margin-top:24px"><label for="backup-file">${t("Choose backup")}</label><input id="backup-file" type="file" accept="application/json,.json" required><button class="danger" style="margin-top:16px">${t("Restore backup")}</button></form></section><section class="card"><div class="split"><h2>${t("Cache")}</h2>${button("Clear cache", "clear-cache")}</div></section>`;
+  $("#credentials").closest("section").insertAdjacentHTML("afterend", checksCard());
+  const checks = bindChecks($("[data-configuration-checks]"));
   bindProtection(data.adminPasswordConfigured);
   $("#credentials").onsubmit = (e) => {
     e.preventDefault();
-    run($("#credentials button"), async () => {
-      await api("/setup/config", { method: "POST", body: credentialValues() });
+    const form = $("#credentials");
+    const values = credentialValues();
+    checks.invalidate();
+    run(form.querySelector("button"), async () => {
+      try {
+        await api("/setup/config", { method: "POST", body: values });
+      } catch (error) {
+        void checks.check({ saved: false });
+        throw error;
+      }
+      if (!form.isConnected) return;
+      toast("Settings saved");
+      void checks.check({ saved: true });
       Object.assign(data, await api("/setup/admin-status"));
       for (const [selector, preview] of [
         ["#api-id", data.apiIdPreview],
         ["#api-hash", data.apiHashPreview],
         ["#tmdb-token", data.tmdbTokenPreview],
       ]) {
-        const input = $(selector);
+        const input = form.querySelector(selector);
         input.value = "";
         input.required = false;
         input.placeholder = preview || "****";
       }
-      toast("Changes saved");
     });
   };
   $("#protection-form").onsubmit = (e) => {

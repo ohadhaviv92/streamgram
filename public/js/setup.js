@@ -1,3 +1,4 @@
+import { checksCard, bindChecks } from "./checks.js";
 import { t } from "./i18n.js";
 import {
   $,
@@ -68,15 +69,17 @@ export async function setup() {
           method: "POST",
           body: credentialValues(),
         });
-        telegram();
+        telegram(true);
       });
     };
   }
-  function telegram() {
+  function telegram(saved = false) {
     frame(
       2,
       `<h2>${t("Connect Telegram")}</h2><p>${t("Connect Telegram to start streaming in Stremio.")}</p><div class="actions">${button("Connect Telegram", "connect", "primary")}<a class="btn ghost" href="/">${t("Go to dashboard")}</a></div>`,
     );
+    $("#main").insertAdjacentHTML("beforeend", checksCard());
+    bindChecks($("[data-configuration-checks]"), { saved });
     $("#connect").onclick = () =>
       connect({}, async (token) => {
         const account = await api("/settings", { token });

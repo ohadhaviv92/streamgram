@@ -1,3 +1,6 @@
+import { ApiOperation, ApiResponse } from "@nestjs/swagger";
+import { ConfigurationChecksService } from "./configuration-checks.service";
+import { ConfigurationChecksResponseDto } from "./dto/configuration-checks-response.dto";
 import {
   Body,
   Controller,
@@ -23,7 +26,24 @@ export class SetupController {
     private readonly instanceConfig: InstanceConfigService,
     private readonly management: ManagementService,
     private readonly clients: TelegramClientManager,
+    private readonly checks: ConfigurationChecksService,
   ) {}
+
+  @Post("checks")
+  @HttpCode(200)
+  @UseGuards(AdminGuard)
+  @ApiOperation({ summary: "Check saved instance credentials and streaming HTTPS" })
+  @ApiResponse({ status: 200, type: ConfigurationChecksResponseDto })
+  checkConfiguration() {
+    return this.checks.check();
+  }
+
+  @Get("probe")
+  @ApiOperation({ summary: "Identify this process for the streaming HTTPS check" })
+  probe(@Res({ passthrough: true }) response: Response) {
+    response.setHeader("Cache-Control", "no-store");
+    return this.checks.probe();
+  }
 
   @Get("status")
   getStatus() {

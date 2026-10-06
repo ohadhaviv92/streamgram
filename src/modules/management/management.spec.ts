@@ -1,3 +1,4 @@
+import { ConfigurationChecksService } from "../setup/configuration-checks.service";
 import { Test } from "@nestjs/testing";
 import { INestApplication } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -401,6 +402,7 @@ describe("HTTP management and personal access", () => {
   it.each([
     ["/admin/accounts", "GET"],
     ["/setup/admin-status", "GET"],
+    ["/setup/checks", "POST"],
     ["/setup/config", "POST"],
     ["/setup/config/export", "GET"],
     ["/setup/config/import", "POST"],
@@ -421,6 +423,29 @@ describe("HTTP management and personal access", () => {
     expect([400, 401]).toContain(result.status);
     // Valid auth payloads reach the principal check; management guards run before DTO validation.
     if (!path.startsWith("/auth/qr")) expect(result.status).toBe(401);
+  });
+  it("returns only a public process identifier from the HTTPS probe", async () => {
+    const result = await request("/setup/probe");
+    expect(result.status).toBe(200);
+    expect(Object.keys(result.data)).toEqual(["instanceId"]);
+    expect(result.data.instanceId).toBe(app.get(ConfigurationChecksService).probe().instanceId);
+  });
+  it("keeps saved values when advisory checks fail and separates checks from saves", async () => {
+    const results = {
+      checkedAt: new Date().toISOString(),
+      telegram: { status: "passed" as const, message: "Telegram accepted the API ID and hash." },
+      tmdb: { status: "failed" as const, message: "TMDB rejected the bearer token." },
+      streamingHttps: { status: "failed" as const, message: "The public URL did not return this StreamGram instance." },
+    };
+    const check = jest.spyOn(app.get(ConfigurationChecksService), "check").mockResolvedValue(results);
+    expect((await request("/setup/config", "POST", { publicUrl: "https://wrong.example" }, { cookie })).status).toBe(200);
+    expect((await request("/setup/config", "POST", { adminPassword: "" }, { cookie })).status).toBe(200);
+    expect(check).not.toHaveBeenCalled();
+    const response = await request("/setup/checks", "POST", undefined, { cookie });
+    expect(response.status).toBe(200);
+    expect(response.data).toEqual(results);
+    expect(config.getConfig().publicUrl).toBe("https://wrong.example");
+    expect((await request("/setup/checks", "POST", undefined, { cookie, origin: "https://evil.example" })).status).toBe(403);
   });
   it("supports legacy password headers and session cookies", async () => {
     expect(

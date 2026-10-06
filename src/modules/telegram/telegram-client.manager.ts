@@ -1,6 +1,7 @@
 import { Injectable, OnApplicationShutdown, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { TelegramClient } from "teleproto";
+import { Api, TelegramClient } from "teleproto";
+import { Logger, LogLevel } from "teleproto/extensions/Logger";
 import { StringSession } from "teleproto/sessions";
 import { logger } from "../../logger";
 import { InstanceConfigService } from "../user/instance-config.service";
@@ -20,6 +21,8 @@ export interface ClientSession {
 export class TelegramClientManager implements OnApplicationShutdown {
   /** Live clients, keyed by user token. */
   private readonly clients = new Map<string, ClientSession>();
+  private readonly credentialChecks = new Set<TelegramClient>();
+  private shuttingDown = false;
 
   /**
    * Serialises concurrent initialisation attempts for the same token so that
@@ -51,6 +54,50 @@ export class TelegramClientManager implements OnApplicationShutdown {
   // ---------------------------------------------------------------------------
   // Public API
   // ---------------------------------------------------------------------------
+
+  /** Checks application credentials without authorizing an account or retaining a login token. */
+  async checkApiCredentials(apiId: number, apiHash: string): Promise<void> {
+    if (this.shuttingDown) throw new Error("Telegram client manager is shutting down");
+    const client = new TelegramClient(new StringSession(""), apiId, apiHash, {
+      connectionRetries: 1,
+      requestRetries: 1,
+      floodSleepThreshold: 0,
+      timeout: 10,
+      autoReconnect: false,
+      baseLogger: new Logger(LogLevel.NONE),
+    });
+    this.credentialChecks.add(client);
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        (async () => {
+          await client.connect();
+          if (cancelled || this.shuttingDown) throw new Error("Telegram credential check cancelled");
+          const result = await client.invoke(new Api.auth.ExportLoginToken({
+            apiId,
+            apiHash,
+            exceptIds: [],
+          }));
+          if (!(result instanceof Api.auth.LoginToken))
+            throw new Error("Unexpected Telegram credential check response");
+          // Do not export the session, publish the token, or accept a login.
+        })(),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error("Telegram credential check timed out")), 10_000);
+        }),
+      ]);
+    } finally {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+      try {
+        // destroy marks the client unusable immediately and also disconnects it.
+        await client.destroy();
+      } finally {
+        this.credentialChecks.delete(client);
+      }
+    }
+  }
 
   /**
    * Returns the live client for `userToken`, initialising one if necessary.
@@ -177,7 +224,9 @@ export class TelegramClientManager implements OnApplicationShutdown {
   }
 
   async onApplicationShutdown(): Promise<void> {
+    this.shuttingDown = true;
     clearInterval(this.cleanupTimer);
+    await Promise.allSettled(Array.from(this.credentialChecks, (client) => client.destroy()));
     await this.disconnectAll();
   }
 

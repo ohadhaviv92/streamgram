@@ -1,3 +1,4 @@
+import { ConfigurationChecksService } from "./configuration-checks.service";
 import { InstanceConfigService } from "../user/instance-config.service";
 import { ManagementService } from "../management/management.service";
 import { TelegramClientManager } from "../telegram/telegram-client.manager";
@@ -21,6 +22,7 @@ describe("Public bootstrap privacy", () => {
     config,
     {} as ManagementService,
     {} as TelegramClientManager,
+    {} as ConfigurationChecksService,
   );
   it("returns only public initialization and protection flags", () => {
     expect(controller.getStatus()).toEqual({
