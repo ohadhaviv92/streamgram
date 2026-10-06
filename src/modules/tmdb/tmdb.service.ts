@@ -194,7 +194,7 @@ export class TmdbService {
         );
         return match?.title || null;
       }
-    } catch (error) {
+    } catch {
       // If alternative titles API fails, return null
       return null;
     }

@@ -1,3 +1,4 @@
+import { ManagementModule } from "./modules/management/management.module";
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { ServeStaticModule } from "@nestjs/serve-static";
@@ -30,6 +31,7 @@ import { SetupModule } from "./modules/setup/setup.module";
     UserModule,
     AuthModule,
     SetupModule,
+    ManagementModule,
   ],
 })
 export class AppModule {}

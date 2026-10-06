@@ -5,12 +5,7 @@ import { TelegramClient } from "teleproto";
 import { Api } from "teleproto";
 import { StringSession } from "teleproto/sessions";
 import { Logger, LogLevel } from "teleproto/extensions/Logger";
-import { createInterface } from "readline/promises";
-import { stdin as input, stdout as output } from "process";
-import path from "path";
-import { promises as fs } from "fs";
-//@ts-ignore
-import { Message } from "teleproto/tl/custom";
+import { CustomMessage as Message } from "teleproto/tl/custom/message";
 import { EntityLike } from "teleproto/define";
 import bigInt from "big-integer";
 import { computeCheck } from "teleproto/Password";
@@ -30,7 +25,7 @@ export class TelegramClientUnavailableError extends Error {
 }
 
 export class PasswordRequiredError extends Error {
-  constructor(message: string) {
+  constructor(message: string, public readonly sessionString?: string) {
     super(message);
     this.name = "PasswordRequiredError";
   }
@@ -251,105 +246,82 @@ export class TelegramNestService {
     phoneCodeHash: string,
     tempSessionString: string,
     password?: string,
+    passwordRequired = false,
   ): Promise<string> {
     const telegramConfig = this.getTelegramConfig();
-    // Reuse the session from sendAuthCode - this is critical!
     const tempClient = new TelegramClient(
       new StringSession(tempSessionString),
       telegramConfig.apiId,
       telegramConfig.apiHash,
-      {
-        connectionRetries: 5,
-      },
+      { connectionRetries: 5 },
     );
 
     try {
       await tempClient.connect();
-
-      // Attempt to sign in with the code
-      try {
-        await tempClient.invoke(
-          new Api.auth.SignIn({
-            phoneNumber: phone,
-            phoneCodeHash: phoneCodeHash,
-            phoneCode: code,
-          }),
-        );
-      } catch (signInError: any) {
-        // Check if 2FA password is required
-        if (signInError.errorMessage === "SESSION_PASSWORD_NEEDED") {
-          if (!password) {
-            // Password is required but not provided
-            await tempClient.disconnect();
-            await tempClient.destroy();
-            throw new PasswordRequiredError(
-              "Two-factor authentication is enabled. Password required.",
-            );
-          }
-
-          // Password provided, attempt 2FA authentication
-          try {
-            const passwordSrpResult = await tempClient.invoke(
-              new Api.account.GetPassword(),
-            );
-            const passwordHash = await computeCheck(
-              passwordSrpResult,
-              password,
-            );
-            await tempClient.invoke(
-              new Api.auth.CheckPassword({
-                password: passwordHash,
-              }),
-            );
-            logger.info({ phone }, "Successfully verified with 2FA password");
-          } catch (passwordError: any) {
-            await tempClient.disconnect();
-            await tempClient.destroy();
-            logger.error(
-              { error: passwordError, phone },
-              "Failed to verify 2FA password",
-            );
-            throw new Error("Invalid password. Please check and try again.");
-          }
-        } else {
-          // Other sign-in error
-          throw signInError;
+      // Once Telegram accepts the code, retries must continue with the saved
+      // session and CheckPassword rather than submitting the one-time code again.
+      if (!passwordRequired) {
+        try {
+          await tempClient.invoke(
+            new Api.auth.SignIn({
+              phoneNumber: phone,
+              phoneCodeHash,
+              phoneCode: code,
+            }),
+          );
+        } catch (error) {
+          if (
+            (error as { errorMessage?: string }).errorMessage !==
+            "SESSION_PASSWORD_NEEDED"
+          )
+            throw error;
+          passwordRequired = true;
         }
       }
 
-      // Get the final authenticated session string
-      const sessionRaw = tempClient.session.save();
-      const sessionString = typeof sessionRaw === "string" ? sessionRaw : "";
-
-      if (!sessionString) {
-        throw new Error("Failed to generate session string");
+      if (passwordRequired) {
+        if (!password) {
+          throw new PasswordRequiredError(
+            "Enter your Telegram two-step verification password.",
+            String(tempClient.session.save()),
+          );
+        }
+        try {
+          const passwordSrpResult = await tempClient.invoke(
+            new Api.account.GetPassword(),
+          );
+          const passwordHash = await computeCheck(passwordSrpResult, password);
+          await tempClient.invoke(
+            new Api.auth.CheckPassword({ password: passwordHash }),
+          );
+        } catch (error) {
+          throw new PasswordRequiredError(
+            (error as { errorMessage?: string }).errorMessage ===
+            "PASSWORD_HASH_INVALID"
+              ? "Incorrect Telegram password. Try again."
+              : "Could not verify your Telegram password. Try again.",
+            String(tempClient.session.save()),
+          );
+        }
       }
 
-      // Disconnect the temporary client
-      await tempClient.disconnect();
-      await tempClient.destroy();
-
-      logger.info({ phone }, "Successfully verified authentication code");
+      const sessionRaw = tempClient.session.save();
+      const sessionString = typeof sessionRaw === "string" ? sessionRaw : "";
+      if (!sessionString) throw new Error("Failed to generate session string");
+      logger.info("Successfully verified authentication code");
       return sessionString;
     } catch (error) {
+      if (!(error instanceof PasswordRequiredError)) {
+        logger.error({ error }, "Failed to verify authentication code");
+      }
+      throw error;
+    } finally {
       try {
         await tempClient.disconnect();
         await tempClient.destroy();
-      } catch (disconnectError) {
-        logger.warn(
-          { error: disconnectError },
-          "Failed to disconnect temporary client",
-        );
+      } catch (error) {
+        logger.warn({ error }, "Failed to disconnect temporary client");
       }
-
-      // Re-throw PasswordRequiredError without logging as error
-      if (error instanceof PasswordRequiredError) {
-        logger.info({ phone }, "2FA password required for authentication");
-        throw error;
-      }
-
-      logger.error({ error, phone }, "Failed to verify authentication code");
-      throw error;
     }
   }
 
@@ -439,94 +411,58 @@ export class TelegramNestService {
    * Returns null if still pending, or sessionString if authorized
    */
   async checkLoginToken(
-    token: Buffer,
+    _token: Buffer,
     tempSessionString: string,
+    password?: string,
   ): Promise<string | null> {
-    const telegramConfig = this.getTelegramConfig();
-    // Reuse the session from exportLoginToken - this is critical!
-    const tempClient = new TelegramClient(
+    const config = this.getTelegramConfig();
+    const client = new TelegramClient(
       new StringSession(tempSessionString),
-      telegramConfig.apiId,
-      telegramConfig.apiHash,
+      config.apiId,
+      config.apiHash,
       {
         connectionRetries: 5,
         baseLogger: new Logger(LogLevel.NONE),
       },
     );
-
     try {
-      await tempClient.connect();
-
-      // Per the Telegram QR login protocol, poll by exporting the token again
-      // with the same session. ImportLoginToken is only valid for a token
-      // received from LoginTokenMigrateTo (a different DC).
-      let result = await tempClient.invoke(
-        new Api.auth.ExportLoginToken({
-          apiId: telegramConfig.apiId,
-          apiHash: telegramConfig.apiHash,
-          exceptIds: [],
-        }),
-      );
-
-      if (result instanceof Api.auth.LoginTokenMigrateTo) {
-        // The user scanned the code with an account on another DC
-        await tempClient._switchDC(result.dcId);
-        result = await tempClient.invoke(
-          new Api.auth.ImportLoginToken({ token: result.token }),
-        );
-      }
-
-      // Check result type
-      if (result instanceof Api.auth.LoginToken) {
-        // Still pending - user hasn't scanned yet
-        await tempClient.disconnect();
-        await tempClient.destroy();
-        return null;
-      } else if (result instanceof Api.auth.LoginTokenSuccess) {
-        // Successfully authorized!
-        // Get the final authenticated session string
-        const sessionRaw = tempClient.session.save();
-        const sessionString = typeof sessionRaw === "string" ? sessionRaw : "";
-
-        if (!sessionString) {
-          throw new Error("Failed to generate session string after QR auth");
-        }
-
-        await tempClient.disconnect();
-        await tempClient.destroy();
-
-        logger.info("Successfully authorized via QR code");
-        return sessionString;
-      }
-
-      await tempClient.disconnect();
-      await tempClient.destroy();
-      return null;
-    } catch (error: any) {
+      await client.connect();
       try {
-        await tempClient.disconnect();
-        await tempClient.destroy();
-      } catch (disconnectError) {
-        logger.warn(
-          { error: disconnectError },
-          "Failed to disconnect temporary client during QR check",
+        let result = await client.invoke(
+          new Api.auth.ExportLoginToken({
+            apiId: config.apiId,
+            apiHash: config.apiHash,
+            exceptIds: [],
+          }),
+        );
+        if (result instanceof Api.auth.LoginTokenMigrateTo) {
+          await client._switchDC(result.dcId);
+          result = await client.invoke(
+            new Api.auth.ImportLoginToken({ token: result.token }),
+          );
+        }
+        if (!(result instanceof Api.auth.LoginTokenSuccess)) return null;
+      } catch (error: any) {
+        if (error.errorMessage !== "SESSION_PASSWORD_NEEDED") throw error;
+        if (!password)
+          throw new PasswordRequiredError(
+            "Enter your Telegram two-step verification password",
+            String(client.session.save()),
+          );
+        const settings = await client.invoke(new Api.account.GetPassword());
+        await client.invoke(
+          new Api.auth.CheckPassword({
+            password: await computeCheck(settings, password),
+          }),
         );
       }
-
-      // Check if token expired
-      if (
-        error.errorMessage === "SESSION_PASSWORD_NEEDED" ||
-        error.errorMessage === "AUTH_TOKEN_EXPIRED"
-      ) {
-        logger.info(
-          { errorMessage: error.errorMessage },
-          "QR code token expired or invalid",
-        );
-        return null;
-      }
-
-      logger.error({ error }, "Failed to check login token status");
-      throw error;
+      const session = client.session.save();
+      if (typeof session !== "string" || !session)
+        throw new Error("Telegram session unavailable");
+      return session;
+    } finally {
+      await client.disconnect();
+      await client.destroy();
     }
   }
 
@@ -1026,13 +962,13 @@ export class TelegramNestService {
       const aHasYear = Number(
         Boolean(
           a.fileName?.includes(String(targetYear)) ||
-          a.caption?.includes(String(targetYear)),
+            a.caption?.includes(String(targetYear)),
         ),
       );
       const bHasYear = Number(
         Boolean(
           b.fileName?.includes(String(targetYear)) ||
-          b.caption?.includes(String(targetYear)),
+            b.caption?.includes(String(targetYear)),
         ),
       );
 
@@ -1547,8 +1483,10 @@ export class TelegramNestService {
       );
     }
 
-    const cached =
-      await this.cache.getSearchResults<MediaSearchResult[]>(user.token, cacheKey);
+    const cached = await this.cache.getSearchResults<MediaSearchResult[]>(
+      user.token,
+      cacheKey,
+    );
     if (cached) {
       logger.info(
         { cacheKey, count: cached.length },
@@ -1685,7 +1623,8 @@ export class TelegramNestService {
   }
 
   private refreshRuntimeConfig(user?: InstanceProfile): string {
-    let language = this.LANGUAGE_CONFIG.preferredLanguage || user?.language || "en";
+    let language =
+      this.LANGUAGE_CONFIG.preferredLanguage || user?.language || "en";
 
     if (this.instanceConfig) {
       const config = this.instanceConfig.getConfig();
@@ -1826,8 +1765,7 @@ export class TelegramNestService {
     // Telegram's upload.getFile forbids a request from crossing a 1MB boundary,
     // so with full-size (max) chunks the offset must be aligned to requestSize,
     // not just to 4KB.
-    const alignedOffset =
-      Math.floor(start / requestSize) * requestSize;
+    const alignedOffset = Math.floor(start / requestSize) * requestSize;
 
     // Calculate the extra bytes we fetched due to alignment (to be discarded later)
     const alignmentPadding = start - alignedOffset;
@@ -1977,7 +1915,7 @@ export class TelegramNestService {
         if (self instanceof Api.User) {
           me = self;
         }
-      } catch (e) {
+      } catch {
         logger.warn(
           { userToken },
           "Failed to fetch self user entity for folders",

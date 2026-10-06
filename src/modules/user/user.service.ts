@@ -1,13 +1,13 @@
 import { Injectable } from "@nestjs/common";
+import { InstanceConfigService } from "./instance-config.service";
 import {
-  InstanceConfigService,
-  SetupConfigPatch,
-} from "./instance-config.service";
-import { InstanceProfile, UserEntry } from "./instance-profile";
+  InstanceProfile,
+  UserEntry,
+  SupportedLanguage,
+} from "./instance-profile";
 
 /**
- * Local profile facade for the existing controllers. It persists only one
- * profile and does not use a database.
+ * Account-scoped profile facade backed by the local configuration file.
  */
 @Injectable()
 export class UserService {
@@ -25,10 +25,8 @@ export class UserService {
     return this.instanceConfig.createOrUpdateUser(phone, session_string);
   }
 
-  
-  
   async updateName(token: string, name: string): Promise<void> {
-    this.instanceConfig.updateUserName(token, name);
+    this.instanceConfig.updatePersonal(token, { name });
   }
 
   async deleteUser(token: string): Promise<void> {
@@ -59,13 +57,9 @@ export class UserService {
 
   async updateSettings(
     token: string,
-    settings: { language?: string; tmdbToken?: string | null },
+    settings: { language?: SupportedLanguage | null },
   ): Promise<InstanceProfile> {
-    const patch: SetupConfigPatch = {};
-    if (settings.language) patch.preferredLanguage = settings.language as any;
-    if (settings.tmdbToken !== undefined)
-      patch.tmdbBearerToken = settings.tmdbToken || undefined;
-    await this.instanceConfig.update(patch);
+    this.instanceConfig.updatePersonal(token, settings);
     return this.instanceConfig.getProfile(token);
   }
 

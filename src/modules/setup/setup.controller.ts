@@ -3,177 +3,126 @@ import {
   Controller,
   Get,
   HttpCode,
-  HttpStatus,
   Post,
   Req,
   Res,
-  BadRequestException,
-  Headers,
-  UnauthorizedException,
+  ForbiddenException,
+  UseGuards,
 } from "@nestjs/common";
 import { Request, Response } from "express";
 import { InstanceConfigService } from "../user/instance-config.service";
-import { TelegramNestService } from "../telegram/telegram.service";
 import { SetupConfigDto } from "./dto/setup-config.dto";
 import { ImportConfigDto } from "./dto/import-config.dto";
+import { AdminGuard } from "../management/management.guards";
+import { ManagementService } from "../management/management.service";
+import { TelegramClientManager } from "../telegram/telegram-client.manager";
 
 @Controller("setup")
 export class SetupController {
   constructor(
     private readonly instanceConfig: InstanceConfigService,
-    private readonly telegramService: TelegramNestService,
+    private readonly management: ManagementService,
+    private readonly clients: TelegramClientManager,
   ) {}
 
   @Get("status")
-  async getStatus() {
-    const config = this.instanceConfig.getConfig();
-    const users = Object.values(this.instanceConfig.getUsers());
-    const telegramAuthenticated = users.some((u) => Boolean(u.sessionString));
-
-    let telegramPhoneLast4: string | null = null;
-    if (!telegramPhoneLast4 && telegramAuthenticated && users[0]) {
-      telegramPhoneLast4 = this.phoneLast4(users[0].phone);
-      if (!telegramPhoneLast4) {
-        try {
-          telegramPhoneLast4 = this.phoneLast4(
-            await this.telegramService.getTelegramPhone(
-              users[0].token,
-              users[0].sessionString,
-            ),
-          );
-        } catch {
-          // Status should remain available even if Telegram is temporarily unreachable.
-          telegramPhoneLast4 = null;
-        }
-      }
-    }
-
+  getStatus() {
     return {
-      setupComplete: this.instanceConfig.isSetupComplete(),
-      missing: this.instanceConfig.getMissingFields(),
-      passwordRequired: !this.instanceConfig.verifyAdminPassword(""), // True if a password is set
-      publicUrl: config.publicUrl || null,
-      apiIdPrefix: this.maskApiId(config.telegram.apiId),
-      apiHashPrefix: this.maskSecret(config.telegram.apiHash),
-      preferredLanguage: config.preferredLanguage,
-      telegramConfigured: Boolean(config.telegram.apiId && config.telegram.apiHash),
-      telegramAuthenticated,
-      telegramPhoneLast4,
-      userToken: users[0]?.token || null,
-      userName: users[0]?.name || null,
-      users: users.map((u) => ({
-        token: u.token,
-        name: u.name || null,
-        phoneLast4: this.phoneLast4(u.phone),
-      })),
-      tmdbTokenPrefix: this.maskSecret(config.tmdb.bearerToken),
-      tmdbConfigured: Boolean(config.tmdb.bearerToken),
+      managementInitialized: this.instanceConfig.isManagementInitialized(),
+      passwordRequired: this.instanceConfig.isProtected(),
     };
   }
 
+  @Get("bootstrap")
+  bootstrap() {
+    if (this.instanceConfig.isManagementInitialized())
+      throw new ForbiddenException("Management is already initialized");
+    return { adminProtection: true };
+  }
+
+  @Post("initialize")
+  @HttpCode(200)
+  async initialize(
+    @Body() body: SetupConfigDto,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    await this.instanceConfig.initialize(body);
+    this.management.issueSession(request, response);
+    return { success: true };
+  }
+
+  @Get("admin-status")
+  @UseGuards(AdminGuard)
+  configuration() {
+    const config = this.instanceConfig.getConfig();
+    return {
+      publicUrl: config.publicUrl,
+      apiIdConfigured: Boolean(config.telegram.apiId),
+      apiIdPreview: this.credentialPreview(
+        config.telegram.apiId ? String(config.telegram.apiId) : "",
+      ),
+      apiHashConfigured: Boolean(config.telegram.apiHash),
+      apiHashPreview: this.credentialPreview(config.telegram.apiHash),
+      tmdbConfigured: Boolean(config.tmdb.bearerToken),
+      tmdbTokenPreview: this.credentialPreview(config.tmdb.bearerToken, 70),
+      preferredLanguage: config.preferredLanguage,
+      adminProtection: this.instanceConfig.isProtected(),
+      adminPasswordConfigured: this.instanceConfig.hasAdminPassword(),
+      setupComplete: this.instanceConfig.isSetupComplete(),
+      missing: this.instanceConfig.getMissingFields(),
+    };
+  }
+
+  private credentialPreview(secret: string, maxMaskLength = Infinity): string {
+    if (!secret) return "";
+    const maskLength = Math.min(maxMaskLength, Math.max(0, secret.length - 3));
+    return `${"*".repeat(maskLength)}${secret.slice(-3)}`;
+  }
+
   @Post("verify-password")
-  @HttpCode(HttpStatus.OK)
-  async verifyPassword(@Headers("x-admin-password") adminPassword?: string) {
-    if (!this.instanceConfig.verifyAdminPassword(adminPassword)) {
-      throw new UnauthorizedException("Invalid or missing admin password");
-    }
+  @HttpCode(200)
+  @UseGuards(AdminGuard)
+  verifyPassword() {
     return { success: true };
   }
 
   @Post("config")
-  @HttpCode(HttpStatus.OK)
+  @HttpCode(200)
+  @UseGuards(AdminGuard)
   async saveConfig(
     @Body() body: SetupConfigDto,
     @Req() request: Request,
-    @Headers("x-admin-password") adminPassword?: string,
+    @Res({ passthrough: true }) response: Response,
   ) {
-    if (!this.instanceConfig.verifyAdminPassword(adminPassword)) {
-      throw new UnauthorizedException("Invalid or missing admin password");
-    }
-
-    const publicUrl = body.publicUrl || this.detectPublicUrl(request);
-    if (publicUrl) {
-      let parsed: URL;
-      try {
-        parsed = new URL(publicUrl);
-      } catch {
-        throw new BadRequestException("Public URL must be a valid URL");
-      }
-      if (!["http:", "https:"].includes(parsed.protocol)) {
-        throw new BadRequestException("Public URL must use HTTP or HTTPS");
-      }
-      body.publicUrl = parsed.toString().replace(/\/$/, "");
-    }
-
     await this.instanceConfig.update(body);
-    return {
-      success: true,
-      setupComplete: this.instanceConfig.isSetupComplete(),
-      missing: this.instanceConfig.getMissingFields(),
-      message: "Configuration saved successfully",
-    };
+    // Password/protection changes revoke other sessions; keep the initiating admin signed in.
+    if (body.adminPassword?.trim() || body.adminProtection !== undefined)
+      this.management.issueSession(request, response);
+    return { success: true };
   }
 
-
   @Get("config/export")
-  async exportConfig(
-    @Res() res: Response,
-    @Headers("x-admin-password") adminPassword?: string,
-  ): Promise<void> {
-    if (!this.instanceConfig.verifyAdminPassword(adminPassword)) {
-      throw new UnauthorizedException("Invalid or missing admin password");
-    }
-    const raw = this.instanceConfig.exportRaw();
-    const filename = `streamgram-config-${Date.now()}.json`;
-    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-    res.setHeader("Content-Type", "application/json");
-    res.send(raw);
+  @UseGuards(AdminGuard)
+  exportConfig(@Res() response: Response) {
+    response.setHeader(
+      "Content-Disposition",
+      `attachment; filename="streamgram-config-${Date.now()}.json"`,
+    );
+    response.type("application/json").send(this.instanceConfig.exportRaw());
   }
 
   @Post("config/import")
-  @HttpCode(HttpStatus.OK)
+  @HttpCode(200)
+  @UseGuards(AdminGuard)
   async importConfig(
     @Body() body: ImportConfigDto,
-    @Headers("x-admin-password") adminPassword?: string,
-  ): Promise<{ success: boolean; message: string }> {
-    if (!this.instanceConfig.verifyAdminPassword(adminPassword)) {
-      throw new UnauthorizedException("Invalid or missing admin password");
-    }
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
     await this.instanceConfig.importRaw(body);
-    return {
-      success: true,
-      message: "Configuration imported successfully.",
-    };
+    await this.clients.disconnectAll();
+    this.management.logout(request, response);
+    return { success: true, message: "Backup restored. Sign in again." };
   }
-
-  private detectPublicUrl(request: Request): string | undefined {
-    const host = request.headers.host;
-    if (!host || host.startsWith("0.0.0.0") || host.startsWith("localhost")) {
-      return undefined;
-    }
-
-    const forwardedProto = request.headers["x-forwarded-proto"];
-    const protocol =
-      typeof forwardedProto === "string"
-        ? forwardedProto.split(",")[0]
-        : request.protocol;
-    return `${protocol}://${host}`;
-  }
-
-  private maskSecret(secret: string): string | null {
-    const value = secret.trim();
-    return value ? `${value.slice(0, 4)}****` : null;
-  }
-
-  private maskApiId(apiId: number | null | undefined): string | null {
-    if (!apiId) return null;
-    const str = String(apiId);
-    return str.length > 3 ? `***${str.slice(-5)}` : `***`;
-  }
-
-  private phoneLast4(phone: string | null | undefined): string | null {
-    const digits = String(phone || "").replace(/\D/g, "");
-    return digits.length >= 4 ? digits.slice(-4) : null;
-  }
-
 }

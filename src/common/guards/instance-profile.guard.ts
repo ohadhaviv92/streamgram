@@ -9,6 +9,8 @@ import { InstanceConfigService } from "../../modules/user/instance-config.servic
 import { InstanceProfile } from "../../modules/user/instance-profile";
 
 declare global {
+  // Express request augmentation requires a namespace.
+  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
       user: InstanceProfile;

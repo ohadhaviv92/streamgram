@@ -1,4 +1,4 @@
-import { IsArray, IsNumber } from "class-validator";
+import { IsArray, IsInt } from "class-validator";
 import { ApiProperty } from "@nestjs/swagger";
 
 export class UpdateFoldersDto {
@@ -8,6 +8,6 @@ export class UpdateFoldersDto {
     type: [Number],
   })
   @IsArray()
-  @IsNumber({}, { each: true })
+  @IsInt({ each: true })
   folderIds: number[];
 }

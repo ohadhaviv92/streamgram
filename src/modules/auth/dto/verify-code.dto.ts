@@ -5,15 +5,9 @@ import {
   Length,
   IsOptional,
 } from "class-validator";
+import { SendCodeDto } from "./send-code.dto";
 
-export class VerifyCodeDto {
-  @IsString()
-  @IsNotEmpty()
-  @Matches(/^\+?[1-9]\d{1,14}$/, {
-    message: "Phone number must be in E.164 format (e.g., +1234567890)",
-  })
-  phone: string;
-
+export class VerifyCodeDto extends SendCodeDto {
   @IsString()
   @IsNotEmpty()
   @Length(5, 5, { message: "Code must be exactly 5 digits" })
@@ -23,4 +17,8 @@ export class VerifyCodeDto {
   @IsOptional()
   @IsString()
   password?: string;
+
+  @IsOptional()
+  @IsString()
+  attemptId?: string;
 }

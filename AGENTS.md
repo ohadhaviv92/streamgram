@@ -22,7 +22,7 @@ Create a `.env` file or use the first-run web wizard. The wizard can collect all
 - `PUBLIC_URL` or `STREAM_HOST` - Public HTTPS URL for streaming (e.g., `https://yourdomain.com`)
 - `PREFERRED_LANGUAGE` - ISO 639-1 code (en, he, ru, ar)
 
-Setup and authentication endpoints are intentionally unauthenticated for now; protect them with deployment-level access controls.
+Management is protected by AdminGuard when admin protection is enabled. First-run initialization closes permanently after management is initialized. Personal APIs require explicit private account tokens.
 
 See [README.md](README.md#environment-variables) for full environment variable documentation.
 
@@ -54,20 +54,20 @@ Standard NestJS pattern: each feature has `*.module.ts`, `*.controller.ts`, `*.s
 
 ### Single-Instance Architecture
 
-**Critical**: Each installation owns one Telegram client managed by `TelegramClientManager`. See [REFACTORING_SUMMARY.md](REFACTORING_SUMMARY.md) for complete details.
+**Critical**: `TelegramClientManager` owns the process-wide pool of lazy Telegram clients, keyed by account token. Never create persistent clients outside this manager.
 
-- `TelegramClientManager` maintains one lazy client session
+- `TelegramClientManager` maintains one lazy client per account
 - Clients are lazy-initialized on first use
-- The client is disconnected during application shutdown
-- Streaming services receive the shared client for the local instance
+- Clients are disconnected during account deletion, replacement, restore, and application shutdown
+- Streaming services receive the managed client for the requested account
 
 ## Key Patterns & Conventions
 
 ### Authentication Flow
 
-1. Owner enters Telegram/TMDB settings in `POST /setup/config`.
-2. Owner authenticates Telegram with QR or phone code.
-3. The resulting session is stored in `data/config.json`; Stremio uses tokenless URLs.
+1. Owner initializes admin protection and credentials with `POST /setup/initialize`.
+2. Admins, invitations, or personal token holders authenticate Telegram through scoped QR/phone attempts.
+3. Sessions and account preferences persist in the users map in `data/config.json`; Stremio uses `/:userToken/manifest.json`.
 
 See [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md) for complete flow.
 
@@ -78,7 +78,7 @@ Stremio endpoints use `@UseGuards(InstanceProfileGuard)` only to attach the loca
 - Loads the local profile from `data/config.json`
 - Injects user into request: `req.user`
 
-Setup and owner settings are intentionally unauthenticated for now; deployment access control is the operator's responsibility.
+Management uses `AdminGuard`; personal endpoints use `PersonalGuard`. Browser management mutations enforce same-origin checks. `GET /setup/status` exposes only initialization/protection flags.
 
 ### Getting User's Telegram Client
 
@@ -144,7 +144,7 @@ logger.error({ err: error }, "Error message");
 3. **Session strings are sensitive** - Never log or expose `session_string` values
 4. **ISO 639 language codes** - Must use valid ISO 639-1 codes for language config
 5. **Setup protection** - Keep the `data/` directory private and protect setup endpoints at the deployment layer
-6. **No Stremio token** - Addons are installed from `/manifest.json` on the private instance
+6. **Private account links** - Addons use `/:userToken/manifest.json`. Personal endpoints must never fall back to the first account.
 
 ## Testing
 
@@ -164,6 +164,4 @@ Swagger UI available at `/api` endpoint when server running:
 ## Related Documentation
 
 - [README.md](README.md) - Complete project overview and setup guide
-- [REFACTORING_SUMMARY.md](REFACTORING_SUMMARY.md) - Single-instance architecture details
 - [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md) - Authentication flow documentation
-- [QUICKSTART_AUTH.md](QUICKSTART_AUTH.md) - Quick authentication setup guide

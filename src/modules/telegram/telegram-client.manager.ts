@@ -26,6 +26,7 @@ export class TelegramClientManager implements OnApplicationShutdown {
    * exactly one `initializeClient` call is in flight at a time.
    */
   private readonly initializing = new Map<string, Promise<TelegramClient>>();
+  private readonly generations = new Map<string, number>();
 
   /** Idle-cleanup timer handle (kept so tests can clear it if needed). */
   private readonly cleanupTimer: ReturnType<typeof setInterval>;
@@ -61,6 +62,12 @@ export class TelegramClientManager implements OnApplicationShutdown {
     sessionString?: string,
   ): Promise<TelegramClient> {
     const session = sessionString || "";
+    if (this.instanceConfig && !userToken.startsWith("auth:")) {
+      const account = this.instanceConfig.getUserByToken(userToken);
+      if (!account || account.sessionString !== session) {
+        throw new Error("Telegram account was deleted or its session was replaced");
+      }
+    }
 
     if (!this.getApiId() || !this.getApiHash()) {
       throw new Error("Telegram API credentials are not configured");
@@ -95,10 +102,19 @@ export class TelegramClientManager implements OnApplicationShutdown {
 
     // If an initialisation is already in progress for this token, reuse it.
     const inFlight = this.initializing.get(userToken);
-    if (inFlight) return inFlight;
+    if (inFlight) {
+      await inFlight;
+      return this.getOrInitializeClient(userToken, session);
+    }
+    const generation = this.generations.get(userToken) ?? 0;
 
     const init = this.initializeClient(session)
-      .then((client) => {
+      .then(async (client) => {
+        if ((this.generations.get(userToken) ?? 0) !== generation) {
+          await client.disconnect();
+          await client.destroy();
+          throw new Error("Telegram client initialization was cancelled");
+        }
         this.clients.set(userToken, { client, sessionString: session, lastUsed: new Date() });
         logger.info(
           { userToken, totalClients: this.clients.size },
@@ -129,6 +145,8 @@ export class TelegramClientManager implements OnApplicationShutdown {
 
   /** Disconnects and removes the client for `userToken`. */
   async removeClient(userToken: string): Promise<void> {
+    this.generations.set(userToken, (this.generations.get(userToken) ?? 0) + 1);
+    await this.initializing.get(userToken)?.catch(() => undefined);
     const session = this.clients.get(userToken);
     if (!session) return;
 
@@ -154,7 +172,7 @@ export class TelegramClientManager implements OnApplicationShutdown {
       "Disconnecting all Telegram clients",
     );
     await Promise.all(
-      Array.from(this.clients.keys()).map((token) => this.removeClient(token)),
+      Array.from(new Set([...this.clients.keys(), ...this.initializing.keys()])).map((token) => this.removeClient(token)),
     );
   }
 

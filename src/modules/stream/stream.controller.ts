@@ -6,7 +6,6 @@ import {
   Res,
   Req,
   HttpStatus,
-  StreamableFile,
   Header,
   UseGuards,
 } from "@nestjs/common";
@@ -35,7 +34,6 @@ import {
   MovieSearchDto,
   SeriesSearchDto,
   EpisodeParamsDto,
-  StreamParamsDto,
   WatchParamsDto,
 } from "../../common/dto/search-params.dto";
 import {
@@ -84,7 +82,6 @@ export class StreamController {
   @ApiResponse({ status: 200, type: ManifestResponseDto })
   async getManifest(@Req() req: Request): Promise<ManifestResponseDto> {
     const nodeEnv = this.configService.get<string>("server.nodeEnv");
-    const baseUrl = this.getBaseUrl(req.user.token);
     const settingsUrl = `${this.getBaseUrl()}/?action=settings&token=${req.user.token}`;
 
     return {

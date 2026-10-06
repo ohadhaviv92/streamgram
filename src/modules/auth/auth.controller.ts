@@ -1,114 +1,82 @@
 import {
+  Body,
   Controller,
-  Post,
   Delete,
   Get,
-  Body,
-  Param,
   HttpCode,
-  HttpStatus,
+  Param,
+  Post,
+  Req,
+  ForbiddenException,
 } from "@nestjs/common";
-import { ApiTags, ApiOperation, ApiResponse } from "@nestjs/swagger";
+import { IsOptional, IsString, MaxLength } from "class-validator";
+import { Request } from "express";
 import { AuthService } from "./auth.service";
+import { ManagementService } from "../management/management.service";
 import { SendCodeDto } from "./dto/send-code.dto";
 import { VerifyCodeDto } from "./dto/verify-code.dto";
-import {
-  SendCodeResponseDto,
-  VerifyCodeResponseDto,
-} from "./dto/auth-response.dto";
-import {
-  QrGeneratedResponseDto,
-  QrStatusResponseDto,
-  QrInstructionsResponseDto,
-} from "./dto/qr-auth.dto";
-
-@ApiTags("Authentication")
+class QrPasswordDto {
+  @IsOptional() @IsString() @MaxLength(1024) password?: string;
+}
 @Controller("auth")
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
-
+  constructor(
+    private readonly auth: AuthService,
+    private readonly management: ManagementService,
+  ) {}
   @Post("send-code")
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Send authentication code to phone number" })
-  @ApiResponse({
-    status: 200,
-    description: "Code sent successfully",
-    type: SendCodeResponseDto,
-  })
-  @ApiResponse({
-    status: 400,
-    description: "Invalid phone number or rate limited",
-  })
-  async sendCode(
-    @Body() sendCodeDto: SendCodeDto,
-  ): Promise<SendCodeResponseDto> {
-    return this.authService.sendCode(sendCodeDto.phone);
+  @HttpCode(200)
+  sendCode(@Body() body: SendCodeDto, @Req() request: Request) {
+    return this.auth.sendCode(body.phone, this.management.authOwner(request));
   }
-
   @Post("verify-code")
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Verify authentication code" })
-  @ApiResponse({
-    status: 200,
-    description: "Code verified successfully",
-    type: VerifyCodeResponseDto,
-  })
-  @ApiResponse({ status: 400, description: "Invalid code or expired" })
-  async verifyCode(
-    @Body() verifyCodeDto: VerifyCodeDto,
-  ): Promise<VerifyCodeResponseDto> {
-    return this.authService.verifyCode(
-      verifyCodeDto.phone,
-      verifyCodeDto.code,
-      verifyCodeDto.password,
+  @HttpCode(200)
+  verifyCode(@Body() body: VerifyCodeDto, @Req() request: Request) {
+    return this.auth.verifyCode(
+      body.phone,
+      body.code,
+      this.management.authOwner(request),
+      body.password,
+      body.attemptId,
     );
   }
-
   @Post("qr/generate")
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Generate QR code for authentication" })
-  @ApiResponse({
-    status: 200,
-    description: "QR code generated successfully",
-    type: QrGeneratedResponseDto,
-  })
-  @ApiResponse({ status: 400, description: "Failed to generate QR code" })
-  async generateQrCode(): Promise<QrGeneratedResponseDto> {
-    return this.authService.generateQrCode();
+  @HttpCode(200)
+  generateQr(@Req() request: Request) {
+    return this.auth.generateQrCode(this.management.authOwner(request));
   }
-
   @Get("qr/status/:qrToken")
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Check QR code authentication status" })
-  @ApiResponse({
-    status: 200,
-    description: "QR code status retrieved",
-    type: QrStatusResponseDto,
-  })
-  @ApiResponse({ status: 400, description: "Invalid or expired QR token" })
-  async checkQrStatus(
-    @Param("qrToken") qrToken: string,
-  ): Promise<QrStatusResponseDto> {
-    return this.authService.checkQrStatus(qrToken);
+  qrStatus(@Param("qrToken") id: string, @Req() request: Request) {
+    return this.auth.checkQrStatus(id, this.management.authOwner(request));
   }
-
+  @Post("qr/status/:qrToken")
+  @HttpCode(200)
+  qrPassword(
+    @Param("qrToken") id: string,
+    @Body() body: QrPasswordDto,
+    @Req() request: Request,
+  ) {
+    return this.auth.checkQrStatus(
+      id,
+      this.management.authOwner(request),
+      body.password,
+    );
+  }
   @Get("qr/instructions")
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Get QR code scanning instructions" })
-  @ApiResponse({
-    status: 200,
-    description: "Instructions retrieved successfully",
-    type: QrInstructionsResponseDto,
-  })
-  async getQrInstructions(): Promise<QrInstructionsResponseDto> {
-    return this.authService.getQrInstructions();
+  instructions() {
+    return this.auth.getQrInstructions();
   }
-
   @Delete("logout/:token")
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Logout user and delete session" })
-  @ApiResponse({ status: 200, description: "Logged out successfully" })
-  async logout(@Param("token") token: string): Promise<void> {
-    return this.authService.logout(token);
+  async logout(@Param("token") token: string, @Req() request: Request) {
+    if (request.get("authorization") || request.query.token !== undefined) {
+      if (this.management.personalToken(request) !== token)
+        throw new ForbiddenException("Account mismatch");
+    } else {
+      // Legacy deletion URLs are themselves explicit private account links.
+      request.query.token = token;
+      this.management.personalToken(request);
+    }
+    await this.auth.logout(token);
+    return { success: true };
   }
 }

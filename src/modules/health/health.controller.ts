@@ -1,4 +1,5 @@
-import { Controller, Get, Delete } from "@nestjs/common";
+import { Controller, Get, Delete, UseGuards } from "@nestjs/common";
+import { AdminGuard } from "../management/management.guards";
 import { ApiTags, ApiOperation, ApiResponse } from "@nestjs/swagger";
 import { TelegramNestService } from "../telegram/telegram.service";
 import { TelegramClientManager } from "../telegram/telegram-client.manager";
@@ -19,44 +20,34 @@ export class HealthController {
   @ApiOperation({ summary: "Check service health" })
   @ApiResponse({ status: 200, type: HealthResponseDto })
   async getHealth(): Promise<HealthResponseDto> {
-    try {
-      const activeClients = this.clientManager.getActiveClientCount();
+    const activeClients = this.clientManager.getActiveClientCount();
 
-      return {
-        status: "healthy",
-        telegram_connected: true,
-        active_clients: activeClients,
-      };
-    } catch (error) {
-      throw error;
-    }
+    return {
+      status: "healthy",
+      telegram_connected: true,
+      active_clients: activeClients,
+    };
   }
 
   @Get("cache/stats")
+  @UseGuards(AdminGuard)
   @ApiOperation({ summary: "Get cache statistics" })
   @ApiResponse({ status: 200, type: CacheStatsResponseDto })
   async getCacheStats(): Promise<CacheStatsResponseDto> {
-    try {
-      const stats = await this.telegramService.getCacheStats();
-      return stats;
-    } catch (error) {
-      throw error;
-    }
+    const stats = await this.telegramService.getCacheStats();
+    return stats;
   }
 
   @Delete("cache/clear")
+  @UseGuards(AdminGuard)
   @ApiOperation({ summary: "Clear all cached data" })
   @ApiResponse({ status: 200, description: "Cache cleared successfully" })
   async clearCache(): Promise<{ message: string }> {
-    try {
-      const success = await this.telegramService.clearCache();
-      if (success) {
-        return { message: "Cache cleared successfully" };
-      } else {
-        throw new Error("Failed to clear cache");
-      }
-    } catch (error) {
-      throw error;
+    const success = await this.telegramService.clearCache();
+    if (success) {
+      return { message: "Cache cleared successfully" };
+    } else {
+      throw new Error("Failed to clear cache");
     }
   }
 }

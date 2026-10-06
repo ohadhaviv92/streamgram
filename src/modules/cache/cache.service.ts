@@ -67,8 +67,7 @@ export class CacheService {
   }
 
   async flushAll(): Promise<void> {
-    // Cache-manager v7 doesn't have a direct reset method
-    // This is a limitation we'll need to document
+    await this.cacheManager.clear();
   }
 
   async getStats() {
@@ -140,9 +139,7 @@ export class CacheService {
   }
 
   async clearAll(): Promise<boolean> {
-    // Cache-manager v7 doesn't have a direct reset method
-    // Return true as individual deletes would need to be done
-    return true;
+    return this.cacheManager.clear();
   }
 
   /**

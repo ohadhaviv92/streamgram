@@ -39,7 +39,7 @@
 - 🔍 **Global search** — open any movie or episode in Stremio and StreamGram searches across your entire connected Telegram account automatically.
 - 📺 **Stream provider** — returns direct stream links for any title Stremio resolves, no source setup required.
 - 📂 **Catalog addon** — optionally select specific Telegram folders or channels to appear as browsable catalogs inside Stremio, so you can explore and play your library directly.
-- 🔗 Install the bridge using a standard `/manifest.json` addon URL.
+- 🔗 Install the bridge using a private `/:userToken/manifest.json` addon URL.
 - 🎬 Use TMDB metadata and localized search terms for movies and series.
 - 🏷️ Tag any accessible Telegram video to the catalog item of your choice using an IMDB or TMDB ID.
 - 🧙 Use the browser setup wizard for configuration, Telegram authentication, and source selection.
@@ -143,16 +143,18 @@ Add `--env-file .env` to `docker run` when supplying environment variables inste
 
 ## Server Configuration & Setup
 
-1. **Set the public URL.** Enter the public URL of this bridge. Stremio and many compatible clients require HTTPS for streaming, so use a TLS reverse proxy like Nginx for public deployments.
-2. **Create Telegram API credentials** at [my.telegram.org](https://my.telegram.org) and enter the API ID and hash.
-3. **Create a TMDB token** in [TMDB API settings](https://www.themoviedb.org/settings/api) and enter the v4 Read Access Token.
-4. **Set an Admin Password (Optional).** Secure your setup wizard by configuring an admin password. Once set, it will be required for any future configuration changes.
-5. **Choose a Secondary Language.** The addon searches in English by default. If you need results in another language (e.g., Hebrew, Russian, Arabic), select it as your preferred language in the setup wizard.
-6. **Authenticate** the Telegram account by QR code or phone code. If Telegram 2FA is enabled, the wizard asks for the password without storing it.
-7. **Select sources.** Load and select the Telegram folders, groups, and channels to search, then save the selection. **This step is required** — without at least one source selected, all searches will return zero results and no streams will be available.
-8. **Install the addon.** Copy the generated `https://your-domain/{user_token}/manifest.json` URL into Stremio or another compatible client.
+1. **Protect management.** New setups enable admin protection by default. Set a password of at least eight characters. Disabling protection makes management accessible to anyone who can reach the instance.
+2. **Configure the instance.** Enter the public HTTPS URL, Telegram API ID/hash from [my.telegram.org](https://my.telegram.org), and TMDB v4 Read Access Token from [TMDB settings](https://www.themoviedb.org/settings/api). Environment values prefill the wizard; blank secrets preserve saved values.
+3. **Connect Telegram.** Authenticate using QR or phone code, including Telegram two-step verification when required.
+4. **Install in Stremio.** Use the prominent install button or copy `https://your-domain/{user_token}/manifest.json`. Folder/channel catalogs are optional; you can install before selecting any.
 
-The wizard can be reopened later to refresh source selections or change local configuration. If you configured an admin password during setup, you will need it to access these settings again.
+After initialization, `/` opens the admin dashboard with Overview, Accounts, Invitations, and Settings. Admins can connect accounts directly or create seven-day, single-use invitations. Copy an invitation when it is created; its secret is not shown again.
+
+Each account has a personal page at `/{user_token}/configure` (the existing `/?action=settings&token=…` link also works). It manages only that account's display name, search language, optional catalogs, reconnection, and deletion. Personal language inherits the instance default unless overridden. English, Hebrew, Russian, and Arabic search remain supported; the dashboard supports English and Hebrew with RTL.
+
+Private account links grant access without a separate user password. Protected management uses an eight-hour browser session; legacy `X-Admin-Password` clients remain supported. Existing installations without an admin password stay unprotected until you enable protection in Settings. Removing all accounts never reopens public first-run setup.
+
+Settings includes backup/restore. Backups contain private Telegram sessions. Restore preserves current admin credentials/protection, replaces accounts/preferences, and invalidates invitations and browser sessions. See [authentication and access documentation](docs/AUTHENTICATION.md) for API details.
 
 ---
 
@@ -178,7 +180,7 @@ See the complete [tag feature documentation](docs/TAG_FEATURE.md) for title-base
 
 ## Environment Variables
 
-All values below are optional when using the setup wizard. Environment variables take precedence over values in `data/config.json`.
+All values below are optional when using the setup wizard. Saved values in `data/config.json` take precedence over environment defaults.
 
 | Variable             | Description                                                                                    |
 | -------------------- | ---------------------------------------------------------------------------------------------- |

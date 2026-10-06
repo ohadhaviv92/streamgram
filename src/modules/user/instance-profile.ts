@@ -6,6 +6,8 @@ export type SupportedLanguage = "en" | "he" | "ru" | "ar";
 export interface UserEntry {
   /** Optional display name (not used for auth). */
   name?: string;
+  telegramId?: string;
+  language?: SupportedLanguage;
   /** Telegram phone number (with + prefix). */
   phone: string;
   /** Authenticated Telegram session string. */
@@ -19,7 +21,7 @@ export interface UserEntry {
 }
 
 /**
- * The single profile owned by one StreamGram installation (one user).
+ * The account profile used by streaming services.
  *
  * Keeps the existing snake_case field names used by streaming code while
  * reflecting the per-user token and session from the users map.
@@ -38,6 +40,9 @@ export interface InstanceProfile {
 
 export interface PersistedInstanceConfig {
   adminPasswordHash?: string;
+  managementInitialized?: boolean;
+  adminProtection?: boolean;
+  invitations?: InvitationRecord[];
   publicUrl?: string;
   telegram?: {
     apiId?: number;
@@ -62,3 +67,17 @@ export interface EffectiveInstanceConfig {
   };
   preferredLanguage: SupportedLanguage;
 }
+
+export interface InvitationRecord {
+  id: string;
+  secretHash: string;
+  createdAt: number;
+  expiresAt: number;
+  revokedAt?: number;
+  usedAt?: number;
+}
+
+export type AuthOwner =
+  | { kind: "admin"; id: string }
+  | { kind: "invitation"; id: string }
+  | { kind: "user"; id: string };

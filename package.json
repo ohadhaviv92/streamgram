@@ -18,7 +18,7 @@
     "start:dev": "tsc -p tsconfig.json --watch & node dist/main.js",
     "start:debug": "node --inspect dist/main.js",
     "start:prod": "node dist/main.js",
-    "lint": "eslint src/**/*.ts",
+    "lint": "eslint \"src/**/*.ts\"",
     "test": "jest",
     "test:watch": "jest --watch"
   },
@@ -46,6 +46,7 @@
     "uuid": "^13.0.0"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
     "@nestjs/testing": "^10.4.22",
     "@types/express": "^4.17.21",
     "@types/jest": "^29.5.14",

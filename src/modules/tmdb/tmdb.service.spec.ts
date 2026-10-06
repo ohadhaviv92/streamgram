@@ -11,7 +11,6 @@ import {
 
 describe("TmdbService", () => {
   let service: TmdbService;
-  let configService: ConfigService;
 
   const mockConfigService = {
     get: jest.fn((key: string, defaultValue?: string) => {
@@ -37,7 +36,6 @@ describe("TmdbService", () => {
     }).compile();
 
     service = module.get<TmdbService>(TmdbService);
-    configService = module.get<ConfigService>(ConfigService);
 
     // Clear all mocks before each test
     jest.clearAllMocks();

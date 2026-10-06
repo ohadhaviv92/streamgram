@@ -1,122 +1,79 @@
 import { InstanceConfigService } from "../user/instance-config.service";
-import { TelegramNestService } from "../telegram/telegram.service";
+import { ManagementService } from "../management/management.service";
+import { TelegramClientManager } from "../telegram/telegram-client.manager";
 import { SetupController } from "./setup.controller";
 
-/** Helper to build a mock InstanceConfigService with a users map. */
-function makeInstanceConfig(opts: {
-  sessionString?: string;
-  phone?: string | null;
-  isComplete?: boolean;
-  missing?: string[];
-}) {
-  const token = "testtoken123";
-  const sessionString = opts.sessionString ?? "secret-session";
-  // null means "not stored in users map" → controller must call getTelegramPhone
-  const phoneInEntry = opts.phone === null ? "" : (opts.phone ?? "+1 (555) 123-4567");
-
-  return {
+describe("Public bootstrap privacy", () => {
+  const config = {
+    isManagementInitialized: jest.fn().mockReturnValue(true),
+    isProtected: jest.fn().mockReturnValue(true),
     getConfig: jest.fn().mockReturnValue({
       publicUrl: "https://stream.example",
-      telegram: { apiId: 1234567, apiHash: "secret-hash" },
-      tmdb: { bearerToken: "secret-token" },
-      preferredLanguage: "he",
-      phone: null,
-      selectedFolders: [],
-      selectedChannels: [],
+      telegram: { apiId: 12345, apiHash: "secret-hash" },
+      tmdb: { bearerToken: "secret-tmdb" },
+      preferredLanguage: "en",
     }),
-    getUsers: jest.fn().mockReturnValue(
-      sessionString
-        ? { [token]: { token, phone: phoneInEntry, sessionString } }
-        : {},
-    ),
-    isSetupComplete: jest.fn().mockReturnValue(opts.isComplete ?? true),
-    getMissingFields: jest.fn().mockReturnValue(opts.missing ?? []),
-    verifyAdminPassword: jest.fn().mockReturnValue(true),
+    hasAdminPassword: jest.fn().mockReturnValue(true),
+    isSetupComplete: jest.fn().mockReturnValue(true),
+    getMissingFields: jest.fn().mockReturnValue([]),
   } as unknown as InstanceConfigService;
-}
-
-describe("SetupController", () => {
-  it("returns safe effective configuration status without secrets", async () => {
-    const instanceConfig = makeInstanceConfig({ phone: "+1 (555) 123-4567" });
-    const telegramService = {
-      getTelegramPhone: jest.fn(),
-    } as unknown as TelegramNestService;
-
-    const status = await new SetupController(instanceConfig, telegramService).getStatus();
-
-    expect(status).toEqual({
-      setupComplete: true,
-      missing: [],
-      passwordRequired: false,
-      publicUrl: "https://stream.example",
-      apiIdPrefix: "***34567",
-      apiHashPrefix: "secr****",
-      preferredLanguage: "he",
-      telegramConfigured: true,
-      telegramAuthenticated: true,
-      telegramPhoneLast4: "4567",
-      userName: null,
-      userToken: "testtoken123",
-      users: [
-        {
-          name: null,
-          phoneLast4: "4567",
-          token: "testtoken123",
-        },
-      ],
-      tmdbTokenPrefix: "secr****",
-      tmdbConfigured: true,
+  const controller = new SetupController(
+    config,
+    {} as ManagementService,
+    {} as TelegramClientManager,
+  );
+  it("returns only public initialization and protection flags", () => {
+    expect(controller.getStatus()).toEqual({
+      managementInitialized: true,
+      passwordRequired: true,
     });
-    expect(telegramService.getTelegramPhone).not.toHaveBeenCalled();
-    expect(status).not.toHaveProperty("apiId");
-    expect(status).not.toHaveProperty("apiHash");
-    expect(status).not.toHaveProperty("sessionString");
-    expect(status).not.toHaveProperty("tmdbBearerToken");
-    expect(status).not.toHaveProperty("setupUnlocked");
+    expect(config.getConfig).not.toHaveBeenCalled();
   });
-
-  it("uses the active Telegram session when no phone is persisted", async () => {
-    const instanceConfig = makeInstanceConfig({ phone: null });
-    const telegramService = {
-      getTelegramPhone: jest.fn().mockResolvedValue("+44 (7700) 900-0123"),
-    } as unknown as TelegramNestService;
-
-    const status = await new SetupController(instanceConfig, telegramService).getStatus();
-
-    expect(status.telegramPhoneLast4).toBe("0123");
-    // getTelegramPhone should have been called with the user's token and session
-    expect(telegramService.getTelegramPhone).toHaveBeenCalledWith(
-      "testtoken123",
-      "secret-session",
+  it("closes first-run configuration after initialization", () => {
+    expect(() => controller.bootstrap()).toThrow("already initialized");
+  });
+  it("keeps environment credentials private until management is initialized", () => {
+    (config.isManagementInitialized as jest.Mock).mockReturnValueOnce(false);
+    expect(controller.bootstrap()).toEqual({ adminProtection: true });
+  });
+  it("returns only the last three credential characters in guarded admin previews", () => {
+    const response = controller.configuration();
+    expect(response.apiIdConfigured).toBe(true);
+    expect(response.apiIdPreview).toBe("**345");
+    expect(response).not.toHaveProperty("apiId");
+    expect(response.apiHashPreview).toBe("********ash");
+    expect(response.tmdbTokenPreview).toBe("********mdb");
+    const json = JSON.stringify(response);
+    expect(json).not.toMatch(
+      /12345|secret-hash|secret-tmdb|sessionString|phone|userToken|users/,
     );
   });
-
-  it("keeps status available when the Telegram phone lookup fails", async () => {
-    const instanceConfig = makeInstanceConfig({ phone: null });
-    const telegramService = {
-      getTelegramPhone: jest.fn().mockRejectedValue(new Error("offline")),
-    } as unknown as TelegramNestService;
-
-    const status = await new SetupController(instanceConfig, telegramService).getStatus();
-
-    expect(status.telegramAuthenticated).toBe(true);
-    expect(status.telegramPhoneLast4).toBeNull();
-  });
-
-  it("does not expose a suffix for phone numbers shorter than four digits", async () => {
-    const instanceConfig = makeInstanceConfig({
-      sessionString: "",
-      phone: "+123",
-      isComplete: false,
-      missing: ["telegram.sessionString (no authenticated users)"],
+  it.each([
+    ["", ""],
+    ["abc", "abc"],
+    ["abcd", "*bcd"],
+  ])("formats empty and short credential previews (%j)", (secret, preview) => {
+    (config.getConfig as jest.Mock).mockReturnValueOnce({
+      publicUrl: "https://stream.example",
+      telegram: { apiId: 12345, apiHash: secret },
+      tmdb: { bearerToken: secret },
+      preferredLanguage: "en",
     });
-    const telegramService = {
-      getTelegramPhone: jest.fn(),
-    } as unknown as TelegramNestService;
-
-    const status = await new SetupController(instanceConfig, telegramService).getStatus();
-
-    expect(status.telegramPhoneLast4).toBeNull();
-    expect(telegramService.getTelegramPhone).not.toHaveBeenCalled();
+    expect(controller.configuration()).toMatchObject({
+      apiHashPreview: preview,
+      tmdbTokenPreview: preview,
+    });
+  });
+  it("leaves an unconfigured Telegram API ID empty", () => {
+    (config.getConfig as jest.Mock).mockReturnValueOnce({
+      publicUrl: "https://stream.example",
+      telegram: { apiId: 0, apiHash: "" },
+      tmdb: { bearerToken: "" },
+      preferredLanguage: "en",
+    });
+    expect(controller.configuration()).toMatchObject({
+      apiIdConfigured: false,
+      apiIdPreview: "",
+    });
   });
 });

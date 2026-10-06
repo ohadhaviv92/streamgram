@@ -2,6 +2,8 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  UnauthorizedException,
+  ForbiddenException,
   OnModuleInit,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -15,6 +17,8 @@ import {
   PersistedInstanceConfig,
   SupportedLanguage,
   UserEntry,
+  AuthOwner,
+  InvitationRecord,
 } from "./instance-profile";
 import { generateUserToken } from "../../common/utils/token";
 
@@ -26,6 +30,7 @@ export interface SetupConfigPatch {
   preferredLanguage?: SupportedLanguage;
   phone?: string;
   adminPassword?: string;
+  adminProtection?: boolean;
 }
 
 @Injectable()
@@ -33,9 +38,15 @@ export class InstanceConfigService implements OnModuleInit {
   private readonly dataDir: string;
   private readonly configPath: string;
   private persisted: PersistedInstanceConfig = {};
+  securityRevision = 0;
 
   constructor(private readonly configService: ConfigService) {
-    this.dataDir = path.resolve(path.join(process.cwd(), "data"));
+    this.dataDir = path.resolve(
+      this.configService.get<string>(
+        "storage.dataDir",
+        path.join(process.cwd(), "data"),
+      ),
+    );
     this.configPath = path.join(this.dataDir, "config.json");
     this.ensureDataDirectory();
     this.loadPersistedConfig();
@@ -96,17 +107,17 @@ export class InstanceConfigService implements OnModuleInit {
 
   /**
    * Build an InstanceProfile for the given token.
-   * Falls back to the first user in the map when no token is provided
-   * (backward-compat for code that doesn't yet know the token).
+   * Requires an explicit token. Account-scoped operations never use a default account.
    */
   getProfile(token?: string): InstanceProfile {
     const users = this.persisted.users ?? {};
-    const entry: UserEntry | undefined = token
-      ? users[token]
-      : Object.values(users)[0];
+    const entry: UserEntry | undefined =
+      token && Object.prototype.hasOwnProperty.call(users, token)
+        ? users[token]
+        : undefined;
 
     if (!entry) {
-      throw new NotFoundException("User not found");
+      throw new UnauthorizedException("Missing or invalid user token");
     }
 
     const config = this.getConfig();
@@ -115,7 +126,7 @@ export class InstanceConfigService implements OnModuleInit {
       phone: entry.phone ?? null,
       session_string: entry.sessionString,
       token: entry.token,
-      language: config.preferredLanguage,
+      language: entry.language ?? config.preferredLanguage,
       tmdb_token: config.tmdb.bearerToken || null,
       selected_folders: JSON.stringify(entry.selectedFolders ?? []),
       selected_channels: JSON.stringify(entry.selectedChannels ?? []),
@@ -126,7 +137,10 @@ export class InstanceConfigService implements OnModuleInit {
    * Lookup a UserEntry by its token. Returns null when not found.
    */
   getUserByToken(token: string): UserEntry | null {
-    return this.persisted.users?.[token] ?? null;
+    const users = this.persisted.users ?? {};
+    return Object.prototype.hasOwnProperty.call(users, token)
+      ? users[token]
+      : null;
   }
 
   /**
@@ -159,7 +173,7 @@ export class InstanceConfigService implements OnModuleInit {
       if (name !== undefined) existing.name = name;
       this.persisted.users = users;
       this.writePersistedConfig();
-      logger.info({ phone, token: existing.token }, "Updated existing user");
+      logger.info("Updated existing user");
       return existing;
     }
 
@@ -169,38 +183,207 @@ export class InstanceConfigService implements OnModuleInit {
     users[token] = entry;
     this.persisted.users = users;
     this.writePersistedConfig();
-    logger.info({ phone, token }, "Created new user");
+    logger.info("Created new user");
     return entry;
   }
 
-  
   /**
    * Delete a user by token.
    */
-  
+
   updateUserName(token: string, name: string): void {
-    if (this.persisted.users && this.persisted.users[token]) {
-      this.persisted.users[token].name = name;
-      this.writePersistedConfig();
-    }
+    this.updatePersonal(token, { name });
   }
 
   deleteUser(token: string): void {
-    if (this.persisted.users && this.persisted.users[token]) {
-      delete this.persisted.users[token];
-      this.writePersistedConfig();
-    }
+    if (!this.getUserByToken(token)) return;
+    const users = { ...this.getUsers() };
+    delete users[token];
+    this.commit({ ...this.persisted, users });
+  }
+
+  isManagementInitialized(): boolean {
+    return this.persisted.managementInitialized === true;
+  }
+
+  isProtected(): boolean {
+    return (
+      this.persisted.adminProtection ??
+      Boolean(this.persisted.adminPasswordHash)
+    );
+  }
+
+  hasAdminPassword(): boolean {
+    return Boolean(this.persisted.adminPasswordHash);
   }
 
   verifyAdminPassword(password?: string): boolean {
-    if (!this.persisted.adminPasswordHash) {
-      return true; // No password set
+    const stored = this.persisted.adminPasswordHash;
+    if (!stored || !password || password.length > 1024) return false;
+    const candidate = stored.startsWith("scrypt$")
+      ? crypto.scryptSync(password, stored.split("$")[1], 64).toString("hex")
+      : crypto.createHash("sha256").update(password).digest("hex");
+    const expected = stored.startsWith("scrypt$")
+      ? stored.split("$")[2]
+      : stored;
+    const valid =
+      candidate.length === expected.length &&
+      crypto.timingSafeEqual(Buffer.from(candidate), Buffer.from(expected));
+    if (valid && !stored.startsWith("scrypt$")) {
+      this.commit({
+        ...this.persisted,
+        adminPasswordHash: this.hashPassword(password),
+      });
     }
-    if (!password) {
-      return false; // Password required but not provided
+    return valid;
+  }
+
+  private hashPassword(password: string): string {
+    const salt = crypto.randomBytes(16).toString("hex");
+    return `scrypt$${salt}$${crypto.scryptSync(password, salt, 64).toString("hex")}`;
+  }
+
+  async initialize(patch: SetupConfigPatch): Promise<void> {
+    if (this.isManagementInitialized())
+      throw new ForbiddenException("Management is already initialized");
+    await this.update(
+      { ...patch, adminProtection: patch.adminProtection ?? true },
+      true,
+    );
+  }
+
+  createInvitation() {
+    const secret = crypto.randomBytes(32).toString("base64url");
+    const record: InvitationRecord = {
+      id: crypto.randomUUID(),
+      secretHash: this.invitationHash(secret),
+      createdAt: Date.now(),
+      expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+    };
+    this.commit({
+      ...this.persisted,
+      invitations: [...(this.persisted.invitations ?? []), record],
+    });
+    return { ...this.invitationSummary(record), secret };
+  }
+
+  getInvitations() {
+    return (this.persisted.invitations ?? []).map((i) =>
+      this.invitationSummary(i),
+    );
+  }
+
+  private invitationSummary(i: InvitationRecord) {
+    return {
+      id: i.id,
+      createdAt: i.createdAt,
+      expiresAt: i.expiresAt,
+      status:
+        i.revokedAt !== undefined
+          ? "revoked"
+          : i.usedAt !== undefined
+            ? "used"
+            : i.expiresAt <= Date.now()
+              ? "expired"
+              : "active",
+    };
+  }
+
+  private invitationHash(secret: string) {
+    return crypto.createHash("sha256").update(secret).digest("hex");
+  }
+
+  validateInvitation(secret: string): InvitationRecord {
+    const record = this.persisted.invitations?.find(
+      (i) => i.secretHash === this.invitationHash(secret),
+    );
+    if (!record) throw new NotFoundException("Invitation not found");
+    return this.requireInvitation(record.id);
+  }
+
+  private requireInvitation(id: string): InvitationRecord {
+    const record = this.persisted.invitations?.find((i) => i.id === id);
+    if (!record) throw new NotFoundException("Invitation not found");
+    const status = this.invitationSummary(record).status;
+    if (status !== "active")
+      throw new ForbiddenException(`Invitation ${status}`);
+    return record;
+  }
+
+  revokeInvitation(id: string) {
+    if (!this.persisted.invitations?.some((i) => i.id === id))
+      throw new NotFoundException("Invitation not found");
+    this.commit({
+      ...this.persisted,
+      invitations: this.persisted.invitations.map((i) =>
+        i.id === id ? { ...i, revokedAt: Date.now() } : i,
+      ),
+    });
+  }
+
+  /** No await between validation and atomic file replacement: invite use and user creation are one transaction. */
+  completeAuthentication(
+    owner: AuthOwner,
+    phone: string,
+    telegramId: string,
+    sessionString: string,
+  ): UserEntry {
+    if (owner.kind === "invitation") this.requireInvitation(owner.id);
+    const users = { ...this.getUsers() };
+    let existing = Object.values(users).find(
+      (u) =>
+        u.telegramId === telegramId ||
+        (!u.telegramId &&
+          u.phone.replace(/\D/g, "") === phone.replace(/\D/g, "")),
+    );
+    if (owner.kind === "user") {
+      const target = this.getUserByToken(owner.id);
+      if (!target) throw new UnauthorizedException("Account was deleted");
+      if (
+        target.telegramId
+          ? target.telegramId !== telegramId
+          : target.phone.replace(/\D/g, "") !== phone.replace(/\D/g, "")
+      ) {
+        throw new ForbiddenException(
+          "Reconnect with the same Telegram account",
+        );
+      }
+      existing = target;
     }
-    const hash = crypto.createHash("sha256").update(password).digest("hex");
-    return hash === this.persisted.adminPasswordHash;
+    const entry = {
+      ...existing,
+      token: existing?.token ?? generateUserToken(),
+      phone,
+      telegramId,
+      sessionString,
+    };
+    users[entry.token] = entry;
+    this.commit({
+      ...this.persisted,
+      users,
+      invitations: (this.persisted.invitations ?? []).map((i) =>
+        owner.kind === "invitation" && i.id === owner.id
+          ? { ...i, usedAt: Date.now() }
+          : i,
+      ),
+    });
+    return entry;
+  }
+
+  updatePersonal(
+    token: string,
+    patch: { name?: string; language?: SupportedLanguage | null },
+  ): void {
+    const entry = this.getUserByToken(token);
+    if (!entry) throw new UnauthorizedException("Invalid user token");
+    const updated = { ...entry };
+    if (patch.name !== undefined) updated.name = patch.name.trim();
+    if (patch.language !== undefined)
+      updated.language = patch.language ?? undefined;
+    this.commit({
+      ...this.persisted,
+      users: { ...this.getUsers(), [token]: updated },
+    });
   }
 
   isSetupComplete(): boolean {
@@ -230,35 +413,44 @@ export class InstanceConfigService implements OnModuleInit {
     return missing;
   }
 
-  async update(patch: SetupConfigPatch): Promise<void> {
+  async update(patch: SetupConfigPatch, initialize = false): Promise<void> {
+    const telegram = { ...this.persisted.telegram };
+    const tmdb = { ...this.persisted.tmdb };
     const next: PersistedInstanceConfig = {
       ...this.persisted,
-      telegram: { ...(this.persisted.telegram || {}) },
-      tmdb: { ...(this.persisted.tmdb || {}) },
+      ...(initialize ? { managementInitialized: true } : {}),
+      telegram,
+      tmdb,
     };
 
     if (patch.publicUrl !== undefined) next.publicUrl = patch.publicUrl;
-    if (patch.apiId !== undefined) next.telegram!.apiId = patch.apiId;
-    if (this.hasValue(patch.apiHash)) next.telegram!.apiHash = patch.apiHash;
+    if (patch.apiId !== undefined) telegram.apiId = patch.apiId;
+    if (this.hasValue(patch.apiHash)) telegram.apiHash = patch.apiHash;
     if (this.hasValue(patch.tmdbBearerToken)) {
-      next.tmdb!.bearerToken = patch.tmdbBearerToken;
+      tmdb.bearerToken = patch.tmdbBearerToken;
     }
     if (patch.preferredLanguage !== undefined) {
       next.preferredLanguage = patch.preferredLanguage;
     }
-    if (patch.adminPassword !== undefined) {
-      if (patch.adminPassword === "") {
-        next.adminPasswordHash = undefined;
-      } else {
-        next.adminPasswordHash = crypto
-          .createHash("sha256")
-          .update(patch.adminPassword)
-          .digest("hex");
-      }
+    if (this.hasValue(patch.adminPassword)) {
+      if (patch.adminPassword.length < 8 || patch.adminPassword.length > 1024)
+        throw new BadRequestException(
+          "Use an admin password of 8–1024 characters",
+        );
+      next.adminPasswordHash = this.hashPassword(patch.adminPassword);
     }
-
-    this.persisted = next;
-    this.writePersistedConfig();
+    if (patch.adminProtection !== undefined)
+      next.adminProtection = patch.adminProtection;
+    if (next.adminProtection && !next.adminPasswordHash)
+      throw new BadRequestException(
+        "A password is required to enable admin protection",
+      );
+    this.commit(next);
+    if (
+      this.hasValue(patch.adminPassword) ||
+      patch.adminProtection !== undefined
+    )
+      this.securityRevision++;
   }
 
   /** Returns the raw persisted JSON string for export. */
@@ -271,22 +463,16 @@ export class InstanceConfigService implements OnModuleInit {
    * Unknown top-level keys are rejected.
    */
   async importRaw(incoming: PersistedInstanceConfig): Promise<void> {
-    const allowed = new Set([
-      "publicUrl",
-      "telegram",
-      "tmdb",
-      "preferredLanguage",
-      "selectedFolders",
-      "selectedChannels",
-      "users",
-    ]);
-    for (const key of Object.keys(incoming)) {
-      if (!allowed.has(key)) {
-        throw new BadRequestException(`Unexpected config key: ${key}`);
-      }
-    }
-    this.persisted = incoming;
-    this.writePersistedConfig();
+    const { validateBackup } = await import("../setup/dto/import-config.dto");
+    const restored = validateBackup(incoming);
+    this.commit({
+      ...restored,
+      managementInitialized: true,
+      adminPasswordHash: this.persisted.adminPasswordHash,
+      adminProtection: this.isProtected(),
+      invitations: [],
+    });
+    this.securityRevision++;
     logger.info("Config imported successfully");
   }
 
@@ -297,13 +483,17 @@ export class InstanceConfigService implements OnModuleInit {
     const entry = this.getUserByToken(token);
     if (!entry) throw new NotFoundException("User not found");
 
+    const updated = { ...entry };
     if (selections.selectedFolders !== undefined) {
-      entry.selectedFolders = [...selections.selectedFolders];
+      updated.selectedFolders = [...selections.selectedFolders];
     }
     if (selections.selectedChannels !== undefined) {
-      entry.selectedChannels = [...selections.selectedChannels];
+      updated.selectedChannels = [...selections.selectedChannels];
     }
-    this.writePersistedConfig();
+    this.commit({
+      ...this.persisted,
+      users: { ...this.getUsers(), [token]: updated },
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -323,7 +513,9 @@ export class InstanceConfigService implements OnModuleInit {
       : "en";
   }
 
-  private firstNonEmpty(...values: Array<string | number | undefined | null>): string {
+  private firstNonEmpty(
+    ...values: Array<string | number | undefined | null>
+  ): string {
     for (const value of values) {
       if (value !== undefined && value !== null && String(value).trim()) {
         return String(value).trim();
@@ -333,10 +525,12 @@ export class InstanceConfigService implements OnModuleInit {
   }
 
   private hasValue(value: string | undefined): value is string {
-    return value !== undefined && value.trim().length > 0;
+    return typeof value === "string" && value.trim().length > 0;
   }
 
-  private numberValue(...values: Array<string | number | undefined | null>): number {
+  private numberValue(
+    ...values: Array<string | number | undefined | null>
+  ): number {
     for (const value of values) {
       const parsed = Number(value);
       if (Number.isInteger(parsed) && parsed > 0) return parsed;
@@ -358,7 +552,25 @@ export class InstanceConfigService implements OnModuleInit {
 
     try {
       const raw = fs.readFileSync(this.configPath, "utf8");
-      this.persisted = JSON.parse(raw) as PersistedInstanceConfig;
+      const parsed: unknown = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error("Invalid persisted instance config");
+      }
+      this.persisted = parsed as PersistedInstanceConfig;
+      const next = { ...this.persisted };
+      if (next.invitations !== undefined) {
+        next.invitations = this.normalizeInvitations(next.invitations);
+      }
+      if (
+        next.managementInitialized === undefined &&
+        (next.users !== undefined || next.adminPasswordHash)
+      ) {
+        next.managementInitialized = true;
+        next.adminProtection = Boolean(next.adminPasswordHash);
+      }
+      if (JSON.stringify(next) !== JSON.stringify(this.persisted)) {
+        this.commit(next);
+      }
     } catch (error) {
       logger.error({ error }, "Failed to read persisted instance config");
       throw new BadRequestException(
@@ -367,10 +579,75 @@ export class InstanceConfigService implements OnModuleInit {
     }
   }
 
+  /** Older installations stored invitations by ID, with ISO date strings. */
+  private normalizeInvitations(value: unknown): InvitationRecord[] {
+    if (value === null) return [];
+    if (typeof value !== "object") {
+      throw new Error("Invalid persisted invitation collection");
+    }
+    const records: unknown[] = Array.isArray(value)
+      ? value
+      : Object.values(value);
+    return records.map((record) => {
+      if (!record || typeof record !== "object" || Array.isArray(record)) {
+        throw new Error("Invalid persisted invitation record");
+      }
+      const invitation = record as Record<string, unknown>;
+      if (
+        typeof invitation.id !== "string" ||
+        !invitation.id ||
+        typeof invitation.secretHash !== "string" ||
+        !/^[a-f0-9]{64}$/.test(invitation.secretHash)
+      ) {
+        throw new Error("Invalid persisted invitation identity");
+      }
+      return {
+        ...invitation,
+        id: invitation.id,
+        secretHash: invitation.secretHash,
+        createdAt: this.invitationTimestamp(invitation.createdAt),
+        expiresAt: this.invitationTimestamp(invitation.expiresAt),
+        ...(invitation.usedAt !== undefined
+          ? { usedAt: this.invitationTimestamp(invitation.usedAt) }
+          : {}),
+        ...(invitation.revokedAt !== undefined
+          ? { revokedAt: this.invitationTimestamp(invitation.revokedAt) }
+          : {}),
+      };
+    });
+  }
+
+  private invitationTimestamp(value: unknown): number {
+    const timestamp = typeof value === "string" ? Date.parse(value) : value;
+    if (
+      typeof timestamp !== "number" ||
+      !Number.isSafeInteger(timestamp) ||
+      timestamp < 0
+    ) {
+      // Never drop an invalid used/revoked timestamp and accidentally reactivate a link.
+      throw new Error("Invalid persisted invitation timestamp");
+    }
+    return timestamp;
+  }
+
+  private commit(next: PersistedInstanceConfig): void {
+    const previous = this.persisted;
+    this.persisted = next;
+    try {
+      this.writePersistedConfig();
+    } catch (error) {
+      this.persisted = previous;
+      throw error;
+    }
+  }
+
   private writePersistedConfig(): void {
     const temporaryPath = `${this.configPath}.tmp`;
     const serialized = `${JSON.stringify(this.persisted, null, 2)}\n`;
-    fs.writeFileSync(temporaryPath, serialized, { encoding: "utf8", mode: 0o600 });
+    fs.writeFileSync(temporaryPath, serialized, {
+      encoding: "utf8",
+      mode: 0o600,
+    });
     fs.chmodSync(temporaryPath, 0o600);
     fs.renameSync(temporaryPath, this.configPath);
     try {
