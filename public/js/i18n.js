@@ -223,6 +223,9 @@ const he = {
   "Private instance": "מופע פרטי",
   "Session expires after 8 hours.": "החיבור תקף לשמונה שעות.",
   "Configuration incomplete": "ההגדרה לא הושלמה",
+  "Connect a Telegram account": "חברו חשבון טלגרם",
+  "Your API credentials are set. Add a Telegram account to start streaming in Stremio.":
+    "פרטי ה־API הוגדרו. הוסיפו חשבון טלגרם כדי להתחיל לצפות בסטרימיו.",
   "Finish instance credentials in Settings to enable streaming.":
     "השלימו את פרטי המופע בהגדרות כדי לאפשר צפייה.",
   "Share link": "שיתוף קישור",

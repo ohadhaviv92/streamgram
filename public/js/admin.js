@@ -59,6 +59,12 @@ export async function admin() {
           ) + `<section class="card" id="account-list"></section>`;
       else {
         const invites = await api("/admin/invitations");
+        const credentialsComplete = Boolean(
+          config.publicUrl &&
+            config.apiIdConfigured &&
+            config.apiHashConfigured &&
+            config.tmdbConfigured,
+        );
         $("#main").innerHTML =
           pageHead(
             "Your Telegram. Your Stream.",
@@ -69,7 +75,9 @@ export async function admin() {
             ? `<div class="notice">${t("When protection is disabled, anyone who can reach this instance can manage it.")}</div>`
             : "") +
           (!config.setupComplete
-            ? `<div class="notice"><strong>${t("Configuration incomplete")}</strong><br>${t("Finish instance credentials in Settings to enable streaming.")}</div>`
+            ? credentialsComplete && accounts.length === 0
+              ? `<div class="notice"><strong>${t("Connect a Telegram account")}</strong><br>${t("Your API credentials are set. Add a Telegram account to start streaming in Stremio.")}</div>`
+              : `<div class="notice"><strong>${t("Configuration incomplete")}</strong><br>${t("Finish instance credentials in Settings to enable streaming.")}</div>`
             : "") +
           `<div class="stats"><section class="card stat"><div class="stat-label">${icon("Accounts")}${t("Telegram accounts")}</div><div class="value">${accounts.length}</div><p class="hint">${t("Connected")}</p></section><section class="card stat"><div class="stat-label">${icon("Invitations")}${t("Active invitations")}</div><div class="value">${invites.filter((i) => i.status === "active").length}</div><p class="hint">${t("Single use · Valid for 7 days")}</p></section><section class="card stat"><div class="stat-label">${icon("shield")}${t("Admin protection")}</div><div class="value">${t(config.adminProtection ? "Enabled" : "Disabled")}</div><p class="hint">${t("Session expires after 8 hours.")}</p></section></div><section class="card"><div class="card-header"><h2>${t("Telegram accounts")}</h2><a class="btn ghost" href="#accounts">${t("View all")}${icon("arrow")}</a></div><div id="account-list"></div></section><section class="card"><div class="card-header"><div><h2>${t("Invitations")}</h2><p>${t("Invite someone to connect their own Telegram account.")}</p></div></div>${button("Create invitation", "create-invitation", "", "plus")}</section>`;
         $("#create-invitation").onclick = createInvitation;
