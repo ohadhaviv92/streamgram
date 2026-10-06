@@ -15,8 +15,11 @@ export const paths = {
   Invitations: "M4 5h16v14H4z M4 6l8 7 8-7",
   Settings:
     "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8 M9 3h6l1 3 3 1 2 5-2 5-3 1-1 3H9l-1-3-3-1-2-5 2-5 3-1z",
+  Tutorials:
+    "M2 3h6a4 4 0 0 1 4 4v14a4 4 0 0 0-4-4H2z M22 3h-6a4 4 0 0 0-4 4v14a4 4 0 0 1 4-4h6z",
   plus: "M12 5v14 M5 12h14",
   arrow: "M7 17L17 7 M7 7h10v10",
+  chevron: "M6 9l6 6 6-6",
   copy: "M8 8h12v13H8z M16 8V3H3v13h5",
   shield: "M12 3l8 3v6c0 5-8 9-8 9s-8-4-8-9V6z M8 12l3 3 5-6",
   play: "M8 4l13 8-13 8z",
@@ -42,7 +45,7 @@ export function languageOptions(selected, inherit = false) {
 }
 export function shell(mode = "", tab = "") {
   const brand = `<a class="brand" href="/"><img class="brandmark" src="/logo-icon-only.png" alt="" width="48" height="48"><span>StreamGram<small>${t("Private instance")}</small></span></a>`;
-  const nav = ["Overview", "Accounts", "Invitations", "Settings"]
+  const nav = ["Overview", "Accounts", "Invitations", "Settings", "Tutorials"]
     .map(
       (label) =>
         `<a href="#${label.toLowerCase()}" ${tab === label ? 'aria-current="page"' : ""}>${icon(label)}${t(label)}</a>`,

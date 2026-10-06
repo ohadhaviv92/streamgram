@@ -148,7 +148,7 @@ Add `--env-file .env` to `docker run` when supplying environment variables inste
 3. **Connect Telegram.** Authenticate using QR or phone code, including Telegram two-step verification when required.
 4. **Install in Stremio.** Use the prominent install button or copy `https://your-domain/{user_token}/manifest.json`. Folder/channel catalogs are optional; you can install before selecting any.
 
-After initialization, `/` opens the admin dashboard with Overview, Accounts, Invitations, and Settings. Admins can connect accounts directly or create seven-day, single-use invitations. Copy an invitation when it is created; its secret is not shown again.
+After initialization, `/` opens the admin dashboard with Overview, Accounts, Invitations, Settings, and Tutorials. Admins can connect accounts directly or create seven-day, single-use invitations. Copy an invitation when it is created; its secret is not shown again.
 
 Each account has a personal page at `/{user_token}/configure` (the existing `/?action=settings&token=…` link also works). It manages only that account's display name, search language, optional catalogs, reconnection, and deletion. Personal language inherits the instance default unless overridden. English, Hebrew, Russian, and Arabic search remain supported; the dashboard supports English and Hebrew with RTL.
 

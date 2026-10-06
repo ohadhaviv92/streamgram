@@ -15,6 +15,7 @@ import {
 } from "./shared.js";
 import { connect } from "./auth.js";
 import { renderSettings } from "./settings.js";
+import { renderTutorials } from "./tutorials.js";
 export async function admin() {
   const session = await api("/admin/session");
   if (!session.authenticated) {
@@ -24,17 +25,22 @@ export async function admin() {
   // A unique browser session also binds authentication on unprotected instances.
   await api("/admin/session", { method: "POST" });
   const render = async () => {
+    const [route, ...routeParts] = location.hash.slice(1).split("/");
     const tab =
       {
         overview: "Overview",
         accounts: "Accounts",
         invitations: "Invitations",
         settings: "Settings",
-      }[location.hash.slice(1)] || "Overview";
+        tutorials: "Tutorials",
+      }[route] || "Overview";
     shell("admin", tab);
     $("#main").innerHTML = `<p role="status">${t("Loading…")}</p>`;
     try {
       const config = await api("/setup/admin-status");
+      if (tab === "Tutorials") {
+        return renderTutorials(routeParts.join("/"));
+      }
       if (tab === "Settings") {
         renderSettings(config);
         return;
@@ -87,8 +93,8 @@ export async function admin() {
     }
   };
   window.onhashchange = async () => {
-    await render();
-    $("#main").focus();
+    const tutorialFocused = await render();
+    if (!tutorialFocused) $("#main").focus();
   };
   await render();
 }

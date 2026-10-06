@@ -14,6 +14,7 @@ const he = {
   Accounts: "חשבונות",
   Invitations: "הזמנות",
   Settings: "הגדרות",
+  Tutorials: "מדריכים",
   Management: "ניהול",
   "Personal account": "החשבון שלי",
   "Sign out": "יציאה",
@@ -73,6 +74,38 @@ const he = {
   "Telegram API hash": "מפתח API של טלגרם",
   "TMDB bearer token": "טוקן TMDB",
   "Get your API ID and hash from Telegram": "קבלת מזהה ומפתח API מטלגרם",
+  "View tutorial": "הצגת המדריך",
+  "Step-by-step help for setting up and using StreamGram.":
+    "עזרה שלב אחר שלב להגדרה ולשימוש ב־StreamGram.",
+  "How do I create a Telegram API ID and API hash?":
+    "איך יוצרים מזהה API ומפתח API של טלגרם?",
+  "How do I create a TMDB API Read Access Token?":
+    "איך יוצרים טוקן גישה לקריאת נתונים ב־TMDB?",
+  "Watch this guide to create the credentials StreamGram needs from Telegram.":
+    "צפו במדריך כדי ליצור את פרטי החיבור ש־StreamGram צריך מטלגרם.",
+  "Watch this guide to get the TMDB API Read Access Token StreamGram needs.":
+    "צפו במדריך כדי לקבל את טוקן הגישה לקריאת נתונים ב־TMDB ש־StreamGram צריך.",
+  "Quick steps": "צעדים מהירים",
+  "Sign in to my.telegram.org using your Telegram account.":
+    "התחברו אל my.telegram.org באמצעות חשבון הטלגרם שלכם.",
+  "Open API development tools and create an app if Telegram asks for one.":
+    "פתחו את API development tools וצרו אפליקציה אם טלגרם מבקשת זאת.",
+  "Copy both values into the Instance credentials section in StreamGram Settings.":
+    "העתיקו את שני הערכים לאזור פרטי המופע בהגדרות StreamGram.",
+  "Save your settings.": "שמרו את ההגדרות.",
+  "Sign in to your TMDB account.": "התחברו לחשבון ה־TMDB שלכם.",
+  "Open Settings → API.": "פתחו הגדרות ← API.",
+  "Create or copy the API Read Access Token (v4).":
+    "צרו או העתיקו את טוקן הגישה לקריאת נתונים (v4).",
+  "Paste the token into the TMDB bearer token field in StreamGram Settings.":
+    "הדביקו את הטוקן בשדה טוקן ה־TMDB בהגדרות StreamGram.",
+  "Open Telegram API portal": "פתיחת פורטל ה־API של טלגרם",
+  "Open TMDB API settings": "פתיחת הגדרות ה־API של TMDB",
+  "Watch on YouTube": "צפייה ב־YouTube",
+  "Keep your API hash private.": "שמרו על מפתח ה־API שלכם פרטי.",
+  "Keep your TMDB token private.": "שמרו על טוקן ה־TMDB שלכם פרטי.",
+  "Only enter it in your own StreamGram instance.":
+    "הזינו אותו רק במופע StreamGram האישי שלכם.",
   "Get your API Read Access Token from TMDB":
     "קבלת טוקן גישה לקריאת נתונים מ־TMDB",
   "Default search language": "שפת חיפוש ברירת מחדל",
