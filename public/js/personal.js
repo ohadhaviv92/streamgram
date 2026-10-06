@@ -20,7 +20,8 @@ export async function personal(token) {
   const data = await api("/settings", { token });
   $("#main").innerHTML =
     `<div class="page-head"><div><div class="eyebrow">${t("Personal account")}</div><h1>${esc(data.name || t("Account"))}</h1></div>${badge(data.telegramConnected ? "Connected" : "Reconnect needed", data.telegramConnected ? "" : "warn")}</div>${installCard(data.manifestUrl)}<section class="card"><h2>${t("Account preferences")}</h2><form id="preferences" style="margin-top:24px"><div class="grid"><div class="field"><label for="name">${t("Display name")}</label><input id="name" maxlength="80" value="${esc(data.name)}" autocomplete="nickname"></div><div class="field"><label for="personal-language">${t("Search language")}</label><select id="personal-language">${languageOptions(data.personalLanguage || "", true)}</select></div></div><button class="primary">${t("Save changes")}</button></form></section><section class="card"><details id="catalogs"><summary>${t("Channel and folder catalogs (optional)")}</summary><p>${t("Browse selected folders and channels inside Stremio. You can install without selecting any.")}</p>${button("Load folders and channels", "load-sources")}<p id="sources-status" role="status" class="hint"></p><div id="source-lists" class="grid"></div>${button("Save catalogs", "save-sources", "primary")}</details></section><section class="card"><h2>${t("Account controls")}</h2><p>${t("Reconnect using the same Telegram account. Your private link and preferences stay the same.")}</p><div class="actions">${button("Reconnect Telegram", "reconnect")}${button("Delete account", "delete-account", "danger")}</div></section>`;
-  $("#copy-manifest").onclick = () => copy(data.manifestUrl);
+  $("#copy-manifest").onclick = () =>
+    copy(data.manifestUrl, "Manifest copy to clipboard");
   $("#preferences").onsubmit = (e) => {
     e.preventDefault();
     run($("#preferences button"), async () => {

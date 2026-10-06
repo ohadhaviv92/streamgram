@@ -78,6 +78,7 @@ const he = {
   "Copy link": "העתקת קישור",
   Copy: "העתקה",
   "Copied to clipboard": "הועתק ללוח",
+  "Manifest copy to clipboard": "המניפסט הועתק ללוח",
   "No accounts yet": "אין עדיין חשבונות",
   "Connect Telegram to start streaming in Stremio.":
     "חברו טלגרם כדי להתחיל לצפות בסטרימיו.",

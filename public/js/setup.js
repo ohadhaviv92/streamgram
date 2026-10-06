@@ -88,7 +88,8 @@ export async function setup() {
           installCard(account.manifestUrl) +
             `<a class="btn" href="/?action=settings&token=${encodeURIComponent(token)}">${t("Open personal page")}</a>`,
         );
-        $("#copy-manifest").onclick = () => copy(account.manifestUrl);
+        $("#copy-manifest").onclick = () =>
+          copy(account.manifestUrl, "Manifest copy to clipboard");
       });
   }
   secure();

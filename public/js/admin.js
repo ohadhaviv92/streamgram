@@ -145,6 +145,7 @@ function renderAccounts(accounts, config, refresh) {
         (b.onclick = () =>
           copy(
             `${(config.publicUrl || location.origin).replace(/\/$/, "")}/${accounts[Number(b.dataset.copy)].token}/manifest.json`,
+            "Manifest copy to clipboard",
           )),
     );
   document.querySelectorAll("[data-delete]").forEach(

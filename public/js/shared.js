@@ -129,10 +129,10 @@ export async function run(control, work, root) {
     }
   }
 }
-export async function copy(value) {
+export async function copy(value, message = "Copied to clipboard") {
   try {
     await navigator.clipboard.writeText(value);
-    toast("Copied to clipboard");
+    toast(message);
   } catch {
     const d = dialog(
       "Copy link",
