@@ -1070,6 +1070,16 @@ export class TelegramNestService {
         continue;
       }
 
+      const channelTitles = new Map<string, string>();
+      for (const chat of searchResult.chats) {
+        if (!("title" in chat)) continue;
+        const kind =
+          chat instanceof Api.Channel || chat instanceof Api.ChannelForbidden
+            ? "channel"
+            : "chat";
+        channelTitles.set(`${kind}:${chat.id}`, chat.title);
+      }
+
       const rawMessages = (searchResult.messages as Api.TypeMessage[]).filter(
         (msg): msg is Api.Message => msg instanceof Api.Message,
       );
@@ -1192,6 +1202,9 @@ export class TelegramNestService {
 
               results.push({
                 chatId: normalizedChatId,
+                channelTitle: originalMessage.peerId
+                  ? channelTitles.get(this.peerKey(originalMessage.peerId))
+                  : undefined,
                 messageId: originalMessage.id,
                 fileName: displayName,
                 fileSize,
@@ -1246,6 +1259,7 @@ export class TelegramNestService {
 
           results.push({
             chatId: normalizedChatId,
+            channelTitle: channelTitles.get(peerKey),
             messageId: rawMessage.id,
             fileName,
             fileSize,
@@ -2394,6 +2408,7 @@ export class TelegramNestService {
 
             results.push({
               chatId: channelId,
+              channelTitle: "title" in channel ? channel.title : undefined,
               messageId: message.id,
               fileName: fileName || null,
               fileSize,

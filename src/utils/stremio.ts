@@ -195,15 +195,20 @@ export function formatStreamForStremio(
     titleLines.push(displayName);
   }
 
+  const sourceParts: string[] = [];
   if (result.fileSize) {
     const sizeMb = result.fileSize / (1024 * 1024);
     if (sizeMb >= 1024) {
       const sizeGb = Math.round((sizeMb / 1024) * 100) / 100;
-      titleLines.push(`💾 ${sizeGb}GB`);
+      sourceParts.push(`💾 ${sizeGb}GB`);
     } else {
-      titleLines.push(`💾 ${Math.round(sizeMb)}MB`);
+      sourceParts.push(`💾 ${Math.round(sizeMb)}MB`);
     }
   }
+
+  const channelTitle = result.channelTitle?.replace(/\s+/g, " ").trim();
+  if (channelTitle) sourceParts.push(`📣 ${channelTitle}`);
+  if (sourceParts.length) titleLines.push(sourceParts.join(" · "));
 
   return {
     name: metadataParts.join("\n"),

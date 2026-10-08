@@ -2,8 +2,10 @@ import {
   createHowToTagStream,
   extractQualityFromFilename,
   detectSubtitlesAndDubbing,
+  formatStreamForStremio,
 } from "./stremio";
 import { MediaDetails } from "../modules/tmdb/types";
+import { MediaSearchResult } from "../modules/telegram/types";
 
 // Mock configuration module
 jest.mock("../config/configuration", () => ({
@@ -67,6 +69,51 @@ jest.mock("../config/configuration", () => ({
 }));
 
 describe("Stremio Utilities", () => {
+  describe("source channel display", () => {
+    const video: MediaSearchResult = {
+      chatId: "123",
+      messageId: 456,
+      fileName: "Movie.1080p.mkv",
+      fileSize: 1.5 * 1024 ** 3,
+      mimeType: "video/x-matroska",
+      channelTitle: "Movie Channel",
+    };
+
+    it.each([
+      [1.5 * 1024 ** 3, "💾 1.5GB · 📣 Movie Channel"],
+      [700 * 1024 ** 2, "💾 700MB · 📣 Movie Channel"],
+      [0, "📣 Movie Channel"],
+    ])("shows size %s beside the channel", (fileSize, line) => {
+      const result = formatStreamForStremio("instance", { ...video, fileSize });
+      expect(result?.title).toBe(`Movie.1080p.mkv\n${line}`);
+      expect(result?.url).toBe("https://test.example.com/watch/123/456");
+      expect(result?.name).toBe("StreamGram\n1080p");
+    });
+
+    it.each([undefined, "", " \n\t "])("omits unavailable channel title %s", (channelTitle) => {
+      const result = formatStreamForStremio("instance", { ...video, channelTitle });
+      expect(result?.title).toBe("Movie.1080p.mkv\n💾 1.5GB");
+    });
+
+    it.each(["סרטים בעברית", "Русские фильмы", "أفلام عربية"])(
+      "preserves multilingual channel title %s and collapses whitespace",
+      (channelTitle) => {
+        const result = formatStreamForStremio("instance", {
+          ...video,
+          channelTitle: ` \n${channelTitle.replace(/ /g, "\t\n")}  `,
+        });
+        expect(result?.title).toBe(`Movie.1080p.mkv\n💾 1.5GB · 📣 ${channelTitle}`);
+      },
+    );
+
+    it("omits the metadata line when neither size nor channel is available", () => {
+      const result = formatStreamForStremio("instance", {
+        ...video, fileSize: 0, channelTitle: undefined,
+      });
+      expect(result?.title).toBe("Movie.1080p.mkv");
+    });
+  });
+
   describe("createHowToTagStream - Tag Assistant Feature", () => {
     describe("Movie Instructions", () => {
       it("should create English instruction for movie with year", () => {

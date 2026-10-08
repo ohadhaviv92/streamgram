@@ -4,6 +4,8 @@ import { TelegramNestService } from "./telegram.service";
 import { CacheService } from "../cache/cache.service";
 import { TelegramClientManager } from "./telegram-client.manager";
 import { MediaSearchResult } from "./types";
+import { Api } from "teleproto";
+import bigInt from "big-integer";
 
 describe("TelegramNestService - Tag Feature", () => {
   let service: TelegramNestService;
@@ -100,6 +102,88 @@ describe("TelegramNestService - Tag Feature", () => {
 
     service = module.get<TelegramNestService>(TelegramNestService);
     jest.clearAllMocks();
+  });
+
+  describe("source channel metadata", () => {
+    // Minimal Telegram fixtures retain their API prototypes for runtime type checks.
+    function fixture<T extends object>(prototype: T, fields: Partial<T>): T {
+      return Object.assign(Object.create(prototype), fields);
+    }
+
+    const channelPeer = new Api.PeerChannel({ channelId: bigInt(123) });
+    const otherPeer = new Api.PeerChannel({ channelId: bigInt(456) });
+    const channel = fixture(Api.Channel.prototype, {
+      id: bigInt(123), title: "Video Channel",
+    });
+    const otherChannel = fixture(Api.Channel.prototype, {
+      id: bigInt(456), title: "Tag Channel",
+    });
+    const document = fixture(Api.Document.prototype, {
+      mimeType: "video/mp4", size: bigInt(1024),
+      attributes: [new Api.DocumentAttributeFilename({ fileName: "Movie.mp4" })],
+    });
+    const video = fixture(Api.Message.prototype, {
+      id: 7, peerId: channelPeer, message: "Movie",
+      media: new Api.MessageMediaDocument({ document }),
+    });
+    const media = { title: "Movie", type: "movie", episodeInfo: null };
+
+    function searchResponse(messages: Api.Message[], chats: Api.TypeChat[]) {
+      return new Api.messages.Messages({ messages, chats, users: [], topics: [] });
+    }
+
+    it("matches channels by peer rather than response order or colliding group IDs", async () => {
+      const group = fixture(Api.Chat.prototype, { id: bigInt(123), title: "Other Group" });
+      const client = {
+        connected: true,
+        invoke: jest.fn().mockResolvedValue(searchResponse([video], [otherChannel, channel, group])),
+        getInputEntity: jest.fn().mockResolvedValue({}),
+      };
+      const results = await (service as any).performGlobalSearch(client, "Movie", media);
+      expect(results[0]).toMatchObject({ chatId: "123", channelTitle: "Video Channel" });
+      expect(client.invoke).toHaveBeenCalledTimes(1);
+      expect(client.getInputEntity).toHaveBeenCalledTimes(1);
+    });
+
+    it("uses the tagged video's peer, not the tag message's channel", async () => {
+      const tag = fixture(Api.Message.prototype, {
+        id: 8, peerId: otherPeer, message: "/tag tt123",
+        replyTo: new Api.MessageReplyHeader({ replyToMsgId: 7 }),
+      });
+      const client = {
+        connected: true,
+        invoke: jest.fn().mockResolvedValue(searchResponse([tag], [otherChannel, channel])),
+        getInputEntity: jest.fn().mockResolvedValue({}),
+        getMessages: jest.fn().mockResolvedValue([video]),
+      };
+      const results = await (service as any).performGlobalSearch(client, "Movie", media, "tt123");
+      expect(results[0]).toMatchObject({ chatId: "123", messageId: 7, channelTitle: "Video Channel" });
+      expect(client.invoke).toHaveBeenCalledTimes(1);
+      expect(client.getMessages).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps video results when channel metadata is missing", async () => {
+      const client = {
+        connected: true,
+        invoke: jest.fn().mockResolvedValue(searchResponse([video], [])),
+        getInputEntity: jest.fn().mockResolvedValue({}),
+      };
+      const results = await (service as any).performGlobalSearch(client, "Movie", media);
+      expect(results).toHaveLength(1);
+      expect(results[0].channelTitle).toBeUndefined();
+    });
+
+    it("includes the existing channel entity's title for direct channel videos", async () => {
+      const client = {
+        getEntity: jest.fn().mockResolvedValue(channel),
+        invoke: jest.fn().mockResolvedValue(searchResponse([video], [])),
+      };
+      mockClientManager.getOrInitializeClient.mockResolvedValue(client);
+      const results = await service.getChannelMessages("account", "session", "123");
+      expect(results[0]).toMatchObject({ chatId: "123", channelTitle: "Video Channel" });
+      expect(client.getEntity).toHaveBeenCalledTimes(1);
+      expect(client.invoke).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe("Tag Command Parsing", () => {

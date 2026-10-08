@@ -1,5 +1,6 @@
 export interface MediaSearchResult {
   chatId: string;
+  channelTitle?: string;
   messageId: number;
   fileName: string | null;
   fileSize: number;
