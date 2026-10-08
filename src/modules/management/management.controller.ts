@@ -64,7 +64,7 @@ export class ManagementController {
   ) {
     if (
       !this.config.isManagementInitialized() ||
-      !this.config.verifyAdminPassword(body.password)
+      !this.management.verifyAdminPassword(request, body.password)
     )
       throw new UnauthorizedException("Invalid admin password");
     this.management.issueSession(request, response);

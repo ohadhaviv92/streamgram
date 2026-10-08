@@ -1,5 +1,7 @@
 import {
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Injectable,
   UnauthorizedException,
 } from "@nestjs/common";
@@ -10,11 +12,49 @@ import { AuthOwner } from "../user/instance-profile";
 
 const COOKIE = "streamgram_admin";
 const SESSION_MS = 8 * 60 * 60 * 1000;
+const PASSWORD_WINDOW_MS = 15 * 60 * 1000;
+const MAX_PASSWORD_FAILURES = 5;
 
 @Injectable()
 export class ManagementService {
   private sessions = new Map<string, { expires: number; revision: number }>();
+  private passwordFailures = new Map<string, { count: number; expires: number }>();
   constructor(private readonly config: InstanceConfigService) {}
+
+  verifyAdminPassword(request: Request, password: string): boolean {
+    const now = Date.now();
+    for (const [ip, failure] of this.passwordFailures) {
+      if (failure.expires <= now) this.passwordFailures.delete(ip);
+    }
+    // Express only honors forwarded addresses from explicitly trusted proxies.
+    const ip = request.ip || request.socket.remoteAddress || "unknown";
+    let failure = this.passwordFailures.get(ip);
+    const rejectBlocked = (expires: number) => {
+      const retryAfter = Math.ceil((expires - now) / 1000);
+      request.res?.setHeader("Retry-After", String(retryAfter));
+      throw new HttpException(
+        {
+          statusCode: HttpStatus.TOO_MANY_REQUESTS,
+          message: "Too many failed admin password attempts. Try again later.",
+          retryAfter,
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    };
+    if (failure && failure.count >= MAX_PASSWORD_FAILURES) rejectBlocked(failure.expires);
+    if (this.config.verifyAdminPassword(password)) {
+      this.passwordFailures.delete(ip);
+      return true;
+    }
+    failure = {
+      count: (failure?.count ?? 0) + 1,
+      expires: failure?.expires ?? now + PASSWORD_WINDOW_MS,
+    };
+    if (failure.count >= MAX_PASSWORD_FAILURES) failure.expires = now + PASSWORD_WINDOW_MS;
+    this.passwordFailures.set(ip, failure);
+    if (failure.count >= MAX_PASSWORD_FAILURES) rejectBlocked(failure.expires);
+    return false;
+  }
 
   private cookie(request: Request): string | undefined {
     return request.headers.cookie
@@ -75,10 +115,9 @@ export class ManagementService {
   isAuthenticated(request: Request): boolean {
     if (!this.config.isManagementInitialized()) return false;
     if (!this.config.isProtected()) return true;
-    return (
-      Boolean(this.session(request)) ||
-      this.config.verifyAdminPassword(request.get("x-admin-password"))
-    );
+    if (this.session(request)) return true;
+    const password = request.get("x-admin-password");
+    return password !== undefined && this.verifyAdminPassword(request, password);
   }
 
   requireAdmin(request: Request) {
@@ -110,7 +149,7 @@ export class ManagementService {
     const session = this.session(request);
     if (session) return { kind: "admin", id: session };
     const password = request.get("x-admin-password");
-    if (password && this.config.verifyAdminPassword(password))
+    if (password && this.verifyAdminPassword(request, password))
       return {
         kind: "admin",
         id: `legacy:${this.config.securityRevision}:${createHash("sha256").update(password).digest("hex")}`,

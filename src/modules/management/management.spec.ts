@@ -383,6 +383,7 @@ describe("HTTP management and personal access", () => {
       data,
       cookie: response.headers.get("set-cookie"),
       location: response.headers.get("location"),
+      retryAfter: response.headers.get("retry-after"),
     };
   }
   beforeEach(async () => {
@@ -521,6 +522,31 @@ describe("HTTP management and personal access", () => {
     expect(
       (await request("/admin/accounts", "GET", undefined, { cookie })).status,
     ).toBe(200);
+  });
+  it("blocks both password entry points after five shared failures without blocking sessions", async () => {
+    for (let i = 0; i < 4; i++) {
+      const failed = i % 2 === 0
+        ? await request("/admin/login", "POST", { password: "wrong" })
+        : await request("/admin/accounts", "GET", undefined, { "x-admin-password": "wrong" });
+      expect(failed.status).toBe(401);
+    }
+    const fifth = await request("/admin/login", "POST", { password: "wrong" });
+    expect(fifth.status).toBe(429);
+    expect(fifth.retryAfter).toBe("900");
+    expect((await request("/admin/login", "POST", { password: "test-password" }, { "x-forwarded-for": "192.0.2.50" })).status).toBe(429);
+    expect((await request("/setup/admin-status", "GET", undefined, { "x-admin-password": "test-password" })).status).toBe(429);
+    expect((await request("/admin/accounts", "GET", undefined, { cookie })).status).toBe(200);
+    jest.spyOn(Date, "now").mockReturnValue(Date.now() + 15 * 60 * 1000 + 1);
+    expect((await request("/admin/login", "POST", { password: "test-password" })).status).toBe(200);
+  });
+  it("separates client cooldowns when requests come through a trusted proxy", async () => {
+    app.getHttpAdapter().getInstance().set("trust proxy", ["loopback"]);
+    for (let i = 0; i < 5; i++) {
+      const result = await request("/admin/login", "POST", { password: "wrong" }, { "x-forwarded-for": "192.0.2.1" });
+      expect(result.status).toBe(i === 4 ? 429 : 401);
+    }
+    expect((await request("/admin/accounts", "GET", undefined, { "x-admin-password": "test-password", "x-forwarded-for": "192.0.2.1" })).status).toBe(429);
+    expect((await request("/admin/login", "POST", { password: "test-password" }, { "x-forwarded-for": "192.0.2.2" })).status).toBe(200);
   });
   it("accepts a text API ID and preserves saved credentials when their fields are blank", async () => {
     expect(
