@@ -208,7 +208,7 @@ export function formatStreamForStremio(
 
   const channelTitle = result.channelTitle?.replace(/\s+/g, " ").trim();
   if (channelTitle) sourceParts.push(`📣 ${channelTitle}`);
-  if (sourceParts.length) titleLines.push(sourceParts.join(" · "));
+  if (sourceParts.length) titleLines.push(sourceParts.join(" "));
 
   return {
     name: metadataParts.join("\n"),

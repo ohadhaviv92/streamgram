@@ -80,8 +80,8 @@ describe("Stremio Utilities", () => {
     };
 
     it.each([
-      [1.5 * 1024 ** 3, "💾 1.5GB · 📣 Movie Channel"],
-      [700 * 1024 ** 2, "💾 700MB · 📣 Movie Channel"],
+      [1.5 * 1024 ** 3, "💾 1.5GB 📣 Movie Channel"],
+      [700 * 1024 ** 2, "💾 700MB 📣 Movie Channel"],
       [0, "📣 Movie Channel"],
     ])("shows size %s beside the channel", (fileSize, line) => {
       const result = formatStreamForStremio("instance", { ...video, fileSize });
@@ -102,7 +102,7 @@ describe("Stremio Utilities", () => {
           ...video,
           channelTitle: ` \n${channelTitle.replace(/ /g, "\t\n")}  `,
         });
-        expect(result?.title).toBe(`Movie.1080p.mkv\n💾 1.5GB · 📣 ${channelTitle}`);
+        expect(result?.title).toBe(`Movie.1080p.mkv\n💾 1.5GB 📣 ${channelTitle}`);
       },
     );
 
