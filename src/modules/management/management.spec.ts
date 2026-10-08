@@ -444,6 +444,20 @@ describe("HTTP management and personal access", () => {
     // Valid auth payloads reach the principal check; management guards run before DTO validation.
     if (!path.startsWith("/auth/qr")) expect(result.status).toBe(401);
   });
+  it("serves preview metadata before JavaScript, without exposing invitation tokens", async () => {
+    const response = await fetch(`${base}/?invite=private-invitation`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/html");
+    const html = await response.text();
+    expect(html).toContain(`property="og:image" content="${base}/preview-logo-v1.png"`);
+    expect(html).not.toContain("private-invitation");
+    const image = await fetch(`${base}/preview-logo-v1.png`);
+    expect(image.status).toBe(200);
+    expect(image.headers.get("content-type")).toContain("image/png");
+    const bytes = Buffer.from(await image.arrayBuffer());
+    expect(bytes.readUInt32BE(16)).toBe(200);
+    expect(bytes.readUInt32BE(20)).toBe(200);
+  });
   it("creates named invitations and restricts account names to admins", async () => {
     const created = await request("/admin/invitations", "POST", { name: " Alice " }, { cookie });
     expect(created.status).toBe(201);

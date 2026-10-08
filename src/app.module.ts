@@ -12,8 +12,10 @@ import { AuthModule } from "./modules/auth/auth.module";
 import configuration from "./config/configuration";
 import { InstanceConfigModule } from "./modules/user/instance-config.module";
 import { SetupModule } from "./modules/setup/setup.module";
+import { DashboardController } from "./dashboard.controller";
 
 @Module({
+  controllers: [DashboardController],
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,

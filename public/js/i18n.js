@@ -174,6 +174,7 @@ const he = {
   "Cache cleared": "המטמון נוקה",
   "Ready when you are.": "מוכנים לצפייה.",
   "Install in Stremio": "התקנה בסטרימיו",
+  "Connect your Telegram library to Stremio or Nuvio.": "חברו את ספריית הטלגרם ל־Stremio או Nuvio.",
   "Connect your Telegram library to Stremio. Catalogs are optional.":
     "חברו את ספריית הטלגרם לסטרימיו. בחירת קטלוגים היא אופציונלית.",
   "Manifest URL": "כתובת מניפסט",
