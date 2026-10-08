@@ -114,7 +114,7 @@ function login() {
   window.onhashchange = null;
   shell();
   $("#main").innerHTML =
-    `<section class="card login"><div class="eyebrow">${t("Management")}</div><h1>${t("Welcome back")}</h1><p>${t("Sign in to manage your StreamGram instance.")}</p><form id="login-form"><div class="field"><label for="login-password">${t("Admin password")}</label><input id="login-password" type="password" autocomplete="current-password" required maxlength="1024"></div><button class="primary">${t("Sign in")}</button></form><p class="help-line">${t("Session expires after 8 hours.")}</p></section>`;
+    `<section class="card login"><div class="eyebrow">${t("Management")}</div><h1>${t("Welcome back")}</h1><p>${t("Sign in to manage your StreamGram instance.")}</p><form id="login-form"><div class="field"><label for="login-password">${t("Admin password")}</label><input id="login-password" type="password" autocomplete="current-password" required maxlength="1024"></div><button class="primary">${t("Sign in")}</button></form></section>`;
   $("#login-form").onsubmit = (e) => {
     e.preventDefault();
     run($("#login-form button"), async () => {

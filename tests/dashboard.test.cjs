@@ -174,6 +174,114 @@ test('first-run search dropdown matches each dashboard language after initializa
   }
 });
 
+function navigationHarness() {
+  let context;
+  function element() {
+    const attributes = new Map();
+    const classes = new Set();
+    const listeners = new Map();
+    return {
+      inert: false, hidden: false, style: { top: '' }, attributes, listeners,
+      classList: { add: value => classes.add(value), remove: value => classes.delete(value), contains: value => classes.has(value) },
+      setAttribute: (key, value) => attributes.set(key, value), removeAttribute: key => attributes.delete(key),
+      addEventListener: (key, fn) => listeners.set(key, fn), removeEventListener: key => listeners.delete(key),
+      focus() { context.document.activeElement = this; },
+    };
+  }
+  const elements = Object.fromEntries(['#management-sidebar', '#menu-toggle', '#menu-close', '#drawer-backdrop', '.mobile-bar', '#admin-content', '.skip', '#toast', '#app', '#ui-language', '#signout'].map(key => [key, element()]));
+  const first = element(), last = element(), activeLink = element();
+  const sidebar = elements['#management-sidebar'];
+  sidebar.querySelectorAll = () => [first, elements['#menu-close'], activeLink, last];
+  sidebar.contains = target => sidebar.querySelectorAll().includes(target);
+  const mediaListeners = new Set();
+  const mobile = { matches: true, addEventListener: (_, fn) => mediaListeners.add(fn), removeEventListener: (_, fn) => mediaListeners.delete(fn) };
+  const keyboard = new Set();
+  const scrolls = [];
+  context = vm.createContext({
+    t: text => text, language: 'en', supportedLanguages: { en: 'English' },
+    document: {
+      body: element(), activeElement: null,
+      querySelector: selector => elements[selector],
+      addEventListener: (_, fn) => keyboard.add(fn), removeEventListener: (_, fn) => keyboard.delete(fn),
+    },
+    window: { matchMedia: () => mobile, scrollY: 240, scrollTo: (...args) => scrolls.push(args) },
+  });
+  sidebar.querySelector = () => activeLink;
+  vm.runInContext(source('shared.js') + '\ndisposeNavigation = bindMobileNavigation();', context);
+  const key = (value, shiftKey = false) => {
+    let prevented = false;
+    keyboard.forEach(fn => fn({ key: value, shiftKey, preventDefault() { prevented = true; } }));
+    return prevented;
+  };
+  const resize = matches => { mobile.matches = matches; mediaListeners.forEach(fn => fn()); };
+  return { context, elements, first, last, activeLink, mobile, mediaListeners, keyboard, scrolls, key, resize };
+}
+test('mobile drawer opens as a modal, locks scrolling, and restores existing background state', () => {
+  const h = navigationHarness();
+  h.elements['#toast'].inert = true;
+  h.context.document.body.style.top = '3px';
+  h.elements['#menu-toggle'].onclick();
+  assert.equal(h.elements['#management-sidebar'].attributes.get('role'), 'dialog');
+  assert.equal(h.elements['#management-sidebar'].attributes.get('aria-modal'), 'true');
+  assert.equal(h.elements['#menu-toggle'].attributes.get('aria-expanded'), 'true');
+  assert.equal(h.elements['#drawer-backdrop'].hidden, false);
+  assert.equal(h.elements['#admin-content'].inert, true);
+  assert.equal(h.context.document.body.style.top, '-240px');
+  assert.equal(h.context.document.body.classList.contains('navigation-open'), true);
+  assert.equal(h.context.document.activeElement, h.elements['#menu-close']);
+  h.elements['#menu-close'].onclick();
+  assert.equal(h.elements['#management-sidebar'].attributes.has('aria-modal'), false);
+  assert.equal(h.elements['#menu-toggle'].attributes.get('aria-expanded'), 'false');
+  assert.equal(h.elements['#drawer-backdrop'].hidden, true);
+  assert.equal(h.elements['#admin-content'].inert, false);
+  assert.equal(h.elements['#toast'].inert, true);
+  assert.equal(h.context.document.body.style.top, '3px');
+  assert.equal(h.context.document.body.classList.contains('navigation-open'), false);
+  assert.deepEqual(h.scrolls, [[0, 240]]);
+  assert.equal(h.context.document.activeElement, h.elements['#menu-toggle']);
+});
+test('drawer traps keyboard focus and supports Escape, backdrop, and current-page navigation', () => {
+  const h = navigationHarness();
+  for (const dismiss of [() => h.key('Escape'), () => h.elements['#drawer-backdrop'].onclick(), () => h.elements['#management-sidebar'].listeners.get('click')({ target: { closest: () => h.activeLink } })]) {
+    h.elements['#menu-toggle'].onclick();
+    h.last.focus();
+    assert.equal(h.key('Tab'), true);
+    assert.equal(h.context.document.activeElement, h.first);
+    assert.equal(h.key('Tab', true), true);
+    assert.equal(h.context.document.activeElement, h.last);
+    dismiss();
+    assert.equal(h.elements['#drawer-backdrop'].hidden, true);
+    assert.equal(h.context.document.activeElement, h.elements['#menu-toggle']);
+  }
+});
+test('breakpoint changes close the drawer and move focus to visible controls', () => {
+  const h = navigationHarness();
+  h.elements['#menu-toggle'].onclick();
+  h.resize(false);
+  assert.equal(h.context.document.body.classList.contains('navigation-open'), false);
+  assert.equal(h.context.document.activeElement, h.activeLink);
+  h.elements['#menu-toggle'].onclick();
+  assert.equal(h.elements['#drawer-backdrop'].hidden, true);
+  h.context.document.activeElement = h.context.document.body;
+  h.resize(true);
+  assert.equal(h.context.document.activeElement, h.elements['#menu-toggle']);
+});
+test('shell rerenders remove drawer listeners and release modal state', () => {
+  const h = navigationHarness();
+  h.elements['#menu-toggle'].onclick();
+  vm.runInContext('shell("admin", "Overview");', h.context);
+  assert.equal(h.keyboard.size, 1);
+  assert.equal(h.mediaListeners.size, 1);
+  assert.equal(h.context.document.body.classList.contains('navigation-open'), false);
+  h.elements['#menu-toggle'].onclick();
+  vm.runInContext('shell();', h.context);
+  assert.equal(h.keyboard.size, 0);
+  assert.equal(h.mediaListeners.size, 0);
+  assert.equal(h.elements['#management-sidebar'].listeners.size, 0);
+  assert.equal(h.context.document.body.classList.contains('navigation-open'), false);
+  assert.equal(h.elements['#admin-content'].inert, false);
+});
+
 test('invitation list displays escaped names and deletes used records', async () => {
   const main = { innerHTML: '' }, create = {};
   const remove = { dataset: { deleteInvite: 'used-id' } };

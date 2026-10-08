@@ -1,4 +1,4 @@
-![StreamGram logo](https://i.ibb.co/DP58XXk7/logo-banner-transparent.png)
+![StreamGram logo](https://i.ibb.co/4Lcx07n/logo-banner-dark-out.png)
 
 <p align="center">
   <img src="https://img.shields.io/badge/Node.js-20+-339933?logo=node.js&logoColor=white" alt="Node.js 20+">
@@ -154,7 +154,6 @@ Each account has a personal page at `/{user_token}/configure` (the existing `/?a
 
 Set the dashboard language using `?lng=en`, `?lng=he`, `?lng=ru`, or `?lng=ar` (for example, `https://yourdomain.com/?lng=he`). For links that already have query parameters, append `&lng=he`. A valid URL language overrides the saved browser preference; otherwise the dashboard uses the saved preference or English. The dashboard language selector updates the URL and saves the preference. Interface language and search language can be changed independently.
 
-
 Private account links grant access without a separate user password. Protected management uses an eight-hour browser session; legacy `X-Admin-Password` clients remain supported. Existing installations without an admin password stay unprotected until you enable protection in Settings. Removing all accounts never reopens public first-run setup.
 
 Settings includes backup/restore. Backups contain private Telegram sessions. Restore preserves current admin credentials/protection, replaces accounts/preferences, and invalidates invitations and browser sessions. See [authentication and access documentation](docs/AUTHENTICATION.md) for API details.
@@ -185,14 +184,14 @@ See the complete [tag feature documentation](docs/TAG_FEATURE.md) for title-base
 
 All values below are optional when using the setup wizard. Saved values in `data/config.json` take precedence over environment defaults.
 
-| Variable             | Description                                                                                    |
-| -------------------- | ---------------------------------------------------------------------------------------------- |
-| `PUBLIC_URL`         | Public base URL used to create addon and stream links. `STREAM_HOST` is supported as an alias. |
-| `TELEGRAM_API_ID`    | Telegram API ID from [my.telegram.org](https://my.telegram.org).                               |
-| `TELEGRAM_API_HASH`  | Telegram API hash from [my.telegram.org](https://my.telegram.org).                             |
-| `TMDB_BEARER_TOKEN`  | TMDB v4 Read Access Token.                                                                     |
-| `PREFERRED_LANGUAGE` | `en`, `he`, `ru`, or `ar`; defaults to `en`.                                                   |
-| `PORT`               | HTTP port; defaults to `3000`.                                                                 |
+| Variable             | Description                                                                                          |
+| -------------------- | ---------------------------------------------------------------------------------------------------- |
+| `PUBLIC_URL`         | Public base URL used to create addon and stream links. `STREAM_HOST` is supported as an alias.       |
+| `TELEGRAM_API_ID`    | Telegram API ID from [my.telegram.org](https://my.telegram.org).                                     |
+| `TELEGRAM_API_HASH`  | Telegram API hash from [my.telegram.org](https://my.telegram.org).                                   |
+| `TMDB_BEARER_TOKEN`  | TMDB v4 Read Access Token.                                                                           |
+| `PREFERRED_LANGUAGE` | `en`, `he`, `ru`, or `ar`; defaults to `en`.                                                         |
+| `PORT`               | HTTP port; defaults to `3000`.                                                                       |
 | `TRUST_PROXY`        | Comma-separated trusted reverse proxy IPs/CIDRs. Unset by default; forwarded client IPs are ignored. |
 
 Admin password authentication blocks an IP for 15 minutes after five failures within 15 minutes. Login and `x-admin-password` requests share the counter; successful password verification resets it. Existing browser sessions remain usable. Counters are held in memory and reset on restart.

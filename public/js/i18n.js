@@ -1,5 +1,7 @@
 import { ru, ar } from "./translations.js";
 const he = {
+  "Menu": "תפריט",
+  "Close menu": "סגירת התפריט",
   "English is always searched. Selecting another language adds searches in that language.": "החיפוש תמיד כולל אנגלית. בחירת שפה נוספת מוסיפה חיפושים בשפה זו.",
   "Removes cached search results, message details, folders, and channel video lists for all accounts.": "מסיר תוצאות חיפוש, פרטי הודעות, תיקיות ורשימות סרטונים בערוצים מהמטמון של כל החשבונות.",
   "Regenerate QR code": "יצירת קוד QR חדש",
@@ -174,7 +176,9 @@ const he = {
   "Cache cleared": "המטמון נוקה",
   "Ready when you are.": "מוכנים לצפייה.",
   "Install in Stremio": "התקנה בסטרימיו",
+  "Install in Nuvio": "התקנה ב־Nuvio",
   "Connect your Telegram library to Stremio or Nuvio.": "חברו את ספריית הטלגרם ל־Stremio או Nuvio.",
+  "For TV or another device, copy the manifest URL and add it in the app.": "בטלוויזיה או במכשיר אחר, העתיקו את כתובת המניפסט והוסיפו אותה באפליקציה.",
   "Connect your Telegram library to Stremio. Catalogs are optional.":
     "חברו את ספריית הטלגרם לסטרימיו. בחירת קטלוגים היא אופציונלית.",
   "Manifest URL": "כתובת מניפסט",
@@ -229,7 +233,7 @@ const he = {
   "Code sent to your Telegram app": "הקוד נשלח לאפליקציית הטלגרם שלכם",
   "Code sent via SMS": "הקוד נשלח בהודעת SMS",
   Continue: "המשך",
-  "Waiting to connect…": "ממתינים לחיבור…",
+  "Waiting to scan...": "ממתינים לסריקה...",
   "QR code expired. Generate a new one.": "תוקף קוד ה־QR פג. צרו קוד חדש.",
   "Welcome to StreamGram": "ברוכים הבאים ל־StreamGram",
   "A few steps to your own streaming dashboard.":

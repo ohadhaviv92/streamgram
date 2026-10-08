@@ -244,6 +244,17 @@ aside {
   height: 100vh;
   overflow-y: auto;
 }
+.mobile-bar,
+.drawer-backdrop,
+#menu-close {
+  display: none;
+}
+.sidebar-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
 nav {
   display: flex;
   flex-direction: column;
@@ -541,9 +552,18 @@ main {
   font-size: 1.5rem;
   margin-bottom: 8px;
 }
-.install .primary {
-  margin: 4px 0 24px;
+.install-actions {
+  margin: 4px 0 16px;
+}
+.install .install-actions .btn {
+  margin: 0;
   min-height: 48px;
+}
+.install-logo {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  object-fit: contain;
 }
 .copy-field {
   display: flex;
@@ -853,32 +873,67 @@ details[open] summary {
   .shell {
     display: block;
   }
-  aside {
-    height: auto;
-    position: static;
-    padding: 16px;
-    gap: 16px;
-    border-inline-end: 0;
-    border-bottom: 1px solid var(--line);
+  .mobile-bar {
+    display: flex;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    min-height: 72px;
+    padding: max(12px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 12px max(16px, env(safe-area-inset-left));
+    background: #14171c;
   }
-  nav {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 4px;
-  }
-  nav a {
-    flex-direction: column;
-    gap: 6px;
-    padding: 10px 4px;
-    font-size: 0.75rem;
-  }
-  aside .brand small {
+  .mobile-bar .brand small {
     display: none;
   }
-  .aside-footer {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
+  .mobile-bar .brandmark {
+    width: 36px;
+    height: 36px;
+  }
+  #menu-toggle {
+    flex-shrink: 0;
+  }
+  .shell aside {
+    display: none;
+    position: fixed;
+    inset-block-start: 0;
+    inset-inline-start: 0;
+    z-index: 40;
+    width: min(320px, 90vw);
+    height: 100vh;
+    height: 100dvh;
+    padding: max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+    gap: 24px;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  .shell aside.drawer-open {
+    display: flex;
+  }
+  .sidebar-heading .brand {
+    font-size: 1rem;
+    gap: 8px;
+    min-width: 0;
+  }
+  .sidebar-heading .brandmark {
+    width: 32px;
+    height: 32px;
+  }
+  #menu-close {
+    display: inline-flex;
+    flex-shrink: 0;
+    padding: 10px;
+  }
+  .drawer-backdrop:not([hidden]) {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    background: rgb(0 0 0 / 65%);
+  }
+  body.navigation-open {
+    position: fixed;
+    width: 100%;
+    overflow: hidden;
   }
   main,
   .standalone main {
@@ -937,7 +992,7 @@ details[open] summary {
   .brand {
     font-size: 1rem;
   }
-  .install .primary {
+  .install .install-actions .btn {
     width: 100%;
   }
   .tutorial > summary {

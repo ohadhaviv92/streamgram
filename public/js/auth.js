@@ -59,7 +59,7 @@ export function connect(context, onConnected) {
         img.alt = t("QR code");
         img.src = data.qrCodeImage;
         $("#qr-output", d).replaceChildren(img);
-        statusLine.textContent = t("Waiting to connect…");
+        statusLine.textContent = t("Waiting to scan...");
         expiryTimer = setTimeout(() => {
           if (d.open && epoch === generation) expire();
         }, data.expiresIn * 1000);

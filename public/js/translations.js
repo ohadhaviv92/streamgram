@@ -1,4 +1,6 @@
 export const ru = {
+  "Menu": "Меню",
+  "Close menu": "Закрыть меню",
   "Connections need attention": "Соединения требуют внимания",
   "Connections could not be verified": "Не удалось проверить соединения",
   "Open Settings": "Открыть настройки",
@@ -144,7 +146,9 @@ export const ru = {
   "Cache cleared": "Кэш очищен",
   "Ready when you are.": "Всё готово к просмотру.",
   "Install in Stremio": "Установить в Stremio",
+  "Install in Nuvio": "Установить в Nuvio",
   "Connect your Telegram library to Stremio or Nuvio.": "Подключите свою библиотеку Telegram к Stremio или Nuvio.",
+  "For TV or another device, copy the manifest URL and add it in the app.": "Для ТВ или другого устройства скопируйте URL манифеста и добавьте его в приложении.",
   "Connect your Telegram library to Stremio. Catalogs are optional.": "Подключите свою библиотеку Telegram к Stremio. Каталоги необязательны.",
   "Manifest URL": "URL манифеста",
   "Keep this link private. It grants access to your account.": "Храните эту ссылку в секрете. Она даёт доступ к вашему аккаунту.",
@@ -190,7 +194,7 @@ export const ru = {
   "Code sent to your Telegram app": "Код отправлен в приложение Telegram",
   "Code sent via SMS": "Код отправлен по SMS",
   "Continue": "Продолжить",
-  "Waiting to connect…": "Ожидание подключения…",
+  "Waiting to scan...": "Ожидание сканирования...",
   "QR code expired. Generate a new one.": "Срок действия QR-кода истёк. Создайте новый.",
   "Welcome to StreamGram": "Добро пожаловать в StreamGram",
   "A few steps to your own streaming dashboard.": "Несколько шагов до вашей панели трансляций.",
@@ -228,6 +232,8 @@ export const ru = {
   "Removes cached search results, message details, folders, and channel video lists for all accounts.": "Удаляет из кэша результаты поиска, данные сообщений, папки и списки видео каналов всех аккаунтов."
 };
 export const ar = {
+  "Menu": "القائمة",
+  "Close menu": "إغلاق القائمة",
   "Connections need attention": "الاتصالات تحتاج إلى مراجعة",
   "Connections could not be verified": "تعذر التحقق من الاتصالات",
   "Open Settings": "فتح الإعدادات",
@@ -373,7 +379,9 @@ export const ar = {
   "Cache cleared": "تم مسح ذاكرة التخزين المؤقت",
   "Ready when you are.": "جاهز عندما تكون مستعدًا.",
   "Install in Stremio": "التثبيت في Stremio",
+  "Install in Nuvio": "التثبيت في Nuvio",
   "Connect your Telegram library to Stremio or Nuvio.": "اربط مكتبة Telegram الخاصة بك بـ Stremio أو Nuvio.",
+  "For TV or another device, copy the manifest URL and add it in the app.": "للتلفزيون أو جهاز آخر، انسخ رابط الإضافة وأضفه في التطبيق.",
   "Connect your Telegram library to Stremio. Catalogs are optional.": "اربط مكتبة Telegram الخاصة بك بـ Stremio. الكتالوجات اختيارية.",
   "Manifest URL": "رابط الإضافة",
   "Keep this link private. It grants access to your account.": "حافظ على سرية هذا الرابط. يمنح الوصول إلى حسابك.",
@@ -419,7 +427,7 @@ export const ar = {
   "Code sent to your Telegram app": "تم إرسال الرمز إلى تطبيق Telegram",
   "Code sent via SMS": "تم إرسال الرمز عبر رسالة SMS",
   "Continue": "متابعة",
-  "Waiting to connect…": "بانتظار الاتصال…",
+  "Waiting to scan...": "بانتظار المسح...",
   "QR code expired. Generate a new one.": "انتهت صلاحية رمز QR. أنشئ رمزًا جديدًا.",
   "Welcome to StreamGram": "مرحبًا بك في StreamGram",
   "A few steps to your own streaming dashboard.": "بضع خطوات لإعداد لوحة البث الخاصة بك.",

@@ -24,6 +24,7 @@ export const paths = {
   shield: "M12 3l8 3v6c0 5-8 9-8 9s-8-4-8-9V6z M8 12l3 3 5-6",
   play: "M8 4l13 8-13 8z",
   close: "M6 6l12 12 M6 18L18 6",
+  menu: "M3 6h18 M3 12h18 M3 18h18",
   telegram: "M3 11l18-8-5 18-5-7-8-3z M11 14L21 3",
 };
 export const icon = (name) =>
@@ -43,7 +44,10 @@ export function languageOptions(selected, inherit = false) {
       .join("")
   );
 }
+let disposeNavigation = () => {};
 export function shell(mode = "", tab = "") {
+  disposeNavigation();
+  disposeNavigation = () => {};
   const brand = `<a class="brand" href="/"><img class="brandmark" src="/logo-icon-only.png" alt="" width="48" height="48"><span>StreamGram<small>${t("Private instance")}</small></span></a>`;
   const nav = ["Overview", "Accounts", "Invitations", "Settings", "Tutorials"]
     .map(
@@ -53,7 +57,8 @@ export function shell(mode = "", tab = "") {
     .join("");
   const languageControl = `<label class="sr-only" for="ui-language">${t("Interface language")}</label><select id="ui-language">${Object.entries(supportedLanguages).map(([value, label]) => `<option value="${value}" ${language === value ? "selected" : ""}>${label}</option>`).join("")}</select>`;
   $("#app").innerHTML =
-    `<div class="${mode === "admin" ? "shell" : "standalone"}">${mode === "admin" ? `<aside>${brand}<nav aria-label="${t("Management")}">${nav}</nav><div class="aside-footer">${languageControl}${button("Sign out", "signout", "ghost")}</div></aside>` : ""}<div>${mode === "admin" ? "" : `<header>${brand}<div class="toolbar">${languageControl}</div></header>`}<main id="main" tabindex="-1"></main></div></div>`;
+    `<div class="${mode === "admin" ? "shell" : "standalone"}">${mode === "admin" ? `<header class="mobile-bar">${brand}<button type="button" id="menu-toggle" aria-controls="management-sidebar" aria-expanded="false">${icon("menu")}${t("Menu")}</button></header><div class="drawer-backdrop" id="drawer-backdrop" hidden></div><aside id="management-sidebar" aria-label="${t("Management")}"><div class="sidebar-heading">${brand}<button type="button" id="menu-close" class="ghost" aria-label="${t("Close menu")}">${icon("close")}</button></div><nav aria-label="${t("Management")}">${nav}</nav><div class="aside-footer">${languageControl}${button("Sign out", "signout", "ghost")}</div></aside>` : ""}<div${mode === "admin" ? ' id="admin-content"' : ""}>${mode === "admin" ? "" : `<header>${brand}<div class="toolbar">${languageControl}</div></header>`}<main id="main" tabindex="-1"></main></div></div>`;
+  if (mode === "admin") disposeNavigation = bindMobileNavigation();
   $("#ui-language").onchange = (e) => {
     localStorage.setItem("streamgram-ui-language", e.target.value);
     const url = new URL(location.href);
@@ -66,6 +71,85 @@ export function shell(mode = "", tab = "") {
         await api("/admin/logout", { method: "POST" });
         location.assign("/");
       });
+}
+function bindMobileNavigation() {
+  const sidebar = $("#management-sidebar");
+  const toggle = $("#menu-toggle");
+  const closeButton = $("#menu-close");
+  const backdrop = $("#drawer-backdrop");
+  const mobile = window.matchMedia("(max-width: 700px)");
+  const background = [$(".mobile-bar"), $("#admin-content"), $(".skip"), $("#toast")].filter(Boolean);
+  let opened = false;
+  let previousInert = [];
+  let scrollY = 0;
+  let previousTop = "";
+  function close(restoreFocus = true) {
+    if (!opened) return;
+    opened = false;
+    sidebar.classList.remove("drawer-open");
+    sidebar.removeAttribute("role");
+    sidebar.removeAttribute("aria-modal");
+    toggle.setAttribute("aria-expanded", "false");
+    backdrop.hidden = true;
+    background.forEach((element, index) => { element.inert = previousInert[index]; });
+    document.body.classList.remove("navigation-open");
+    document.body.style.top = previousTop;
+    window.scrollTo(0, scrollY);
+    if (restoreFocus) (mobile.matches ? toggle : $("nav a[aria-current]", sidebar)).focus({ preventScroll: true });
+  }
+  function open() {
+    if (!mobile.matches || opened) return;
+    opened = true;
+    scrollY = window.scrollY;
+    previousTop = document.body.style.top;
+    previousInert = background.map(element => element.inert);
+    sidebar.classList.add("drawer-open");
+    sidebar.setAttribute("role", "dialog");
+    sidebar.setAttribute("aria-modal", "true");
+    toggle.setAttribute("aria-expanded", "true");
+    backdrop.hidden = false;
+    document.body.style.top = `-${scrollY}px`;
+    document.body.classList.add("navigation-open");
+    closeButton.focus();
+    background.forEach(element => { element.inert = true; });
+  }
+  function keydown(event) {
+    if (!opened) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      close();
+    } else if (event.key === "Tab") {
+      const controls = [...sidebar.querySelectorAll('a[href], button:not([disabled]), select:not([disabled])')];
+      const first = controls[0], last = controls[controls.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !sidebar.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !sidebar.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+  }
+  const navigate = event => { if (event.target.closest("a[href]")) close(); };
+  const resize = () => {
+    const wasOpen = opened;
+    close(false);
+    // Do not leave focus on a control hidden by the new layout.
+    if (mobile.matches && (sidebar.contains(document.activeElement) || document.activeElement === document.body)) toggle.focus({ preventScroll: true });
+    else if (!mobile.matches && ([toggle, closeButton].includes(document.activeElement) || (wasOpen && document.activeElement === document.body))) $("nav a[aria-current]", sidebar).focus({ preventScroll: true });
+  };
+  toggle.onclick = open;
+  closeButton.onclick = () => close();
+  backdrop.onclick = () => close();
+  sidebar.addEventListener("click", navigate);
+  document.addEventListener("keydown", keydown);
+  mobile.addEventListener("change", resize);
+  return () => {
+    close(false);
+    sidebar.removeEventListener("click", navigate);
+    document.removeEventListener("keydown", keydown);
+    mobile.removeEventListener("change", resize);
+  };
 }
 export async function api(
   path,
@@ -182,5 +266,13 @@ export function pageHead(title, description, action = "") {
   return `<div class="page-head"><div>${title ? `<h1>${t(title)}</h1>` : ""}<p>${t(description)}</p></div>${action}</div>`;
 }
 export function installCard(manifest) {
-  return `<section class="card install"><div class="eyebrow">${t("Ready to install")}</div><h2>${t("Ready when you are.")}</h2><p>${t("Connect your Telegram library to Stremio or Nuvio.")}</p><a class="btn primary" href="${esc(manifest.replace(/^https?:\/\//, "stremio://"))}">${icon("play")}${t("Install in Stremio")}</a><label for="manifest-url">${t("Manifest URL")}</label><div class="copy-field"><input id="manifest-url" readonly value="${esc(manifest)}">${button("Copy manifest", "copy-manifest", "", "copy")}</div><p class="hint">${t("Keep this link private. It grants access to your account.")}</p></section>`;
+  const addonPath = manifest.replace(/^https?:\/\//, "");
+  const stremioUrl = `stremio://${addonPath}`;
+  const nuvioUrl = `nuvio://${addonPath}`;
+  const android = /Android/i.test(globalThis.navigator?.userAgent || "");
+  // Android intents select the requested app even when several apps handle stremio://.
+  const appIntent = (scheme, app) =>
+    `intent://${addonPath}#Intent;scheme=${scheme};package=${app};end`;
+  const nuvioInstall = android ? appIntent("nuvio", "com.nuvio.app") : nuvioUrl;
+  return `<section class="card install"><div class="eyebrow">${t("Ready to install")}</div><h2>${t("Ready when you are.")}</h2><p>${t("Connect your Telegram library to Stremio or Nuvio.")}</p><div class="actions install-actions"><a class="btn primary" href="${esc(stremioUrl)}"><img class="install-logo" src="/assets/stremio-logo.png" alt="" width="24" height="24">${t("Install in Stremio")}</a><a class="btn" href="${esc(nuvioInstall)}"><img class="install-logo" src="/assets/nuvio-logo.png" alt="" width="24" height="24">${t("Install in Nuvio")}</a></div><p class="hint">${t("For TV or another device, copy the manifest URL and add it in the app.")}</p><label for="manifest-url">${t("Manifest URL")}</label><div class="copy-field"><input id="manifest-url" readonly value="${esc(manifest)}">${button("Copy manifest", "copy-manifest", "", "copy")}</div><p class="hint">${t("Keep this link private. It grants access to your account.")}</p></section>`;
 }
