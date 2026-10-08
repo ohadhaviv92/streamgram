@@ -173,3 +173,94 @@ test('first-run search dropdown matches each dashboard language after initializa
     assert.equal(selected, language);
   }
 });
+
+test('invitation list displays escaped names and deletes used records', async () => {
+  const main = { innerHTML: '' }, create = {};
+  const remove = { dataset: { deleteInvite: 'used-id' } };
+  const calls = [];
+  let list = [{ id: 'used-id', name: '<Alice>', status: 'used', createdAt: 1, expiresAt: 2 }];
+  const context = vm.createContext({
+    t: value => value, language: 'en',
+    esc: value => String(value).replace(/</g, '&lt;').replace(/>/g, '&gt;'),
+    $: selector => selector === '#main' ? main : create,
+    pageHead: () => '', button: () => '', badge: () => '', icon: () => '',
+    document: { querySelectorAll: selector => selector === '[data-delete-invite]' && list.length ? [remove] : [] },
+    api: async (url, options) => {
+      calls.push({ url, options });
+      if (options?.method === 'DELETE') { list = []; return { success: true }; }
+      return list;
+    },
+    run: async (_, work) => work(),
+  });
+  vm.runInContext(source('admin.js'), context);
+  await vm.runInContext('invitations()', context);
+  assert.match(main.innerHTML, /&lt;Alice&gt;/);
+  assert.match(main.innerHTML, /data-delete-invite="used-id"/);
+  assert.doesNotMatch(main.innerHTML, /data-revoke=/);
+  await remove.onclick();
+  assert.equal(calls[1].url, '/admin/invitations/used-id/record');
+  assert.equal(calls[1].options.method, 'DELETE');
+  assert.match(main.innerHTML, /No invitations yet/);
+});
+
+test('invitation greeting escapes the recipient name and supports unnamed invitations', async () => {
+  for (const name of ['<Alice>', '']) {
+    const main = { innerHTML: '' }, connectButton = {};
+    const context = vm.createContext({
+      shell() {}, t: text => text,
+      esc: value => value.replace(/</g, '&lt;').replace(/>/g, '&gt;'),
+      api: async () => ({ name }), button: () => '',
+      $: selector => selector === '#main' ? main : connectButton,
+    });
+    vm.runInContext(source('setup.js'), context);
+    await vm.runInContext('invitation("secret")', context);
+    assert.match(main.innerHTML, name ? /Hi &lt;Alice&gt;, you’re invited to StreamGram/ : /You’re invited/);
+    assert.doesNotMatch(main.innerHTML, /<Alice>/);
+  }
+});
+
+test('personal page hides account names and saves language without changing the name', async () => {
+  const elements = new Map(), calls = [];
+  const element = selector => {
+    if (!elements.has(selector)) elements.set(selector, { innerHTML: '', value: 'he' });
+    return elements.get(selector);
+  };
+  const context = vm.createContext({
+    shell() {}, t: text => text, $: element, esc: value => String(value ?? ""),
+    badge: () => '', installCard: () => '', button: () => '', languageOptions: () => '',
+    api: async (url, options) => { calls.push({ url, options }); return { name: 'Admin label' }; },
+    run: async (_, work) => work(), toast() {},
+  });
+  vm.runInContext(source('personal.js'), context);
+  await vm.runInContext('personal("private")', context);
+  assert.doesNotMatch(element('#main').innerHTML, /Admin label|id="name"|Display name/);
+  await element('#preferences').onsubmit({ preventDefault() {} });
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].url, '/settings');
+  assert.equal(calls[1].options.body.language, 'he');
+});
+
+test('signed-in admins edit the account name in the original preferences form', async () => {
+  const elements = new Map(), calls = [];
+  let saving;
+  const element = selector => {
+    if (!elements.has(selector)) elements.set(selector, { innerHTML: '', value: selector === '#name' ? 'New label' : 'he' });
+    return elements.get(selector);
+  };
+  const context = vm.createContext({
+    shell() {}, t: text => text, $: element, esc: value => String(value ?? ''),
+    badge: () => '', installCard: () => '', button: () => '', languageOptions: () => '',
+    api: async (url, options) => { calls.push({ url, options }); return { canEditName: true, name: 'Admin label' }; },
+    run: (_, work) => { saving = work(); return saving; }, toast() {},
+  });
+  vm.runInContext(source('personal.js'), context);
+  await vm.runInContext('personal("private")', context);
+  assert.match(element('#main').innerHTML, /<h1>Admin label<\/h1>/);
+  assert.match(element('#main').innerHTML, /id="name".*value="Admin label"/);
+  element('#preferences').onsubmit({ preventDefault() {} });
+  await saving;
+  assert.equal(calls[1].url, '/name');
+  assert.equal(calls[1].options.body.name, 'New label');
+  assert.equal(calls[2].url, '/settings');
+  assert.equal(element('h1').textContent, 'New label');
+});

@@ -1,6 +1,7 @@
 export class UserSettingsResponseDto {
   success: boolean;
-  name: string;
+  canEditName: boolean;
+  name?: string;
   personalLanguage: string | null;
   language: string;
   tmdbToken: string | null;

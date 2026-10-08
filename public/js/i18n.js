@@ -50,6 +50,8 @@ const he = {
   Overview: "סקירה",
   Accounts: "חשבונות",
   Invitations: "הזמנות",
+  Hi: "שלום",
+  "you’re invited to StreamGram": "הוזמנת ל־StreamGram",
   Settings: "הגדרות",
   Tutorials: "מדריכים",
   Management: "ניהול",

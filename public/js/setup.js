@@ -5,6 +5,7 @@ import {
   api,
   button,
   copy,
+  esc,
   installCard,
   pageHead,
   run,
@@ -97,8 +98,9 @@ export async function setup() {
 }
 export async function invitation(secret) {
   shell();
+  let invite;
   try {
-    await api(`/invitations/${encodeURIComponent(secret)}`);
+    invite = await api(`/invitations/${encodeURIComponent(secret)}`);
   } catch (error) {
     const description = error.message.includes("expired")
       ? "This invitation has expired. Ask your admin for a new link."
@@ -112,7 +114,7 @@ export async function invitation(secret) {
     return;
   }
   $("#main").innerHTML =
-    `<section class="card login"><div class="eyebrow">StreamGram</div><h1>${t("You’re invited")}</h1><p>${t("Connect your Telegram account to get your own private Stremio installation.")}</p>${button("Connect Telegram", "connect", "primary")}<p class="help-line">${t("Single use · Valid for 7 days")}</p></section>`;
+    `<section class="card login"><div class="eyebrow">StreamGram</div><h1>${invite.name ? `${t("Hi")} ${esc(invite.name)}, ${t("you’re invited to StreamGram")}` : t("You’re invited")}</h1><p>${t("Connect your Telegram account to get your own private Stremio installation.")}</p>${button("Connect Telegram", "connect", "primary")}<p class="help-line">${t("Single use · Valid for 7 days")}</p></section>`;
   $("#connect").onclick = () =>
     connect({ invite: secret }, async (token) =>
       location.assign(`/?action=settings&token=${encodeURIComponent(token)}`),

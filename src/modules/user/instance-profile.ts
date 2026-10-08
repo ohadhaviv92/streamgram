@@ -70,6 +70,7 @@ export interface EffectiveInstanceConfig {
 
 export interface InvitationRecord {
   id: string;
+  name?: string;
   secretHash: string;
   createdAt: number;
   expiresAt: number;

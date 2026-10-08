@@ -168,9 +168,21 @@ function renderAccounts(accounts, config, refresh) {
       }),
   );
 }
+function nameDialog(title, value, trigger, save) {
+  const d = dialog(title,
+    `<form id="name-form"><div class="field"><label for="record-name">${t("Display name")}</label><input id="record-name" maxlength="80" value="${esc(value)}" autocomplete="off"></div><button class="primary">${t("Save changes")}</button></form>`, trigger);
+  $("#name-form", d).onsubmit = (event) => {
+    event.preventDefault();
+    run($("#name-form button", d), async () => {
+      await save($("#record-name", d).value.trim(), () => d.close());
+      d.close();
+    }, $(".dialog-body", d));
+  };
+}
 async function createInvitation() {
-  await run($("#create-invitation"), async () => {
-    const invite = await api("/admin/invitations", { method: "POST" });
+  nameDialog("Create invitation", "", $("#create-invitation"), async (name, close) => {
+    const invite = await api("/admin/invitations", { method: "POST", body: { name } });
+    close();
     const url = new URL("/", location.origin);
     url.searchParams.set("invite", invite.secret);
     if (language !== "en") url.searchParams.set("lng", language);
@@ -208,12 +220,20 @@ async function invitations() {
             .reverse()
             .map(
               (i, index) =>
-                `<div class="row"><div><h3>${t("Invitations")} ${list.length - index}</h3><p class="hint">${t("Created")} ${new Date(i.createdAt).toLocaleDateString(language)} · ${t("Expires")} ${new Date(i.expiresAt).toLocaleDateString(language)}</p></div><div class="actions">${badge(i.status, i.status === "active" ? "" : "neutral")}${i.status === "active" ? `<button class="danger" data-revoke="${esc(i.id)}">${t("Revoke")}</button>` : ""}</div></div>`,
+                `<div class="row"><div><h3>${esc(i.name || `${t("Invitations")} ${list.length - index}`)}</h3><p class="hint">${t("Created")} ${new Date(i.createdAt).toLocaleDateString(language)} · ${t("Expires")} ${new Date(i.expiresAt).toLocaleDateString(language)}</p></div><div class="actions">${badge(i.status, i.status === "active" ? "" : "neutral")}${i.status === "active" ? `<button class="danger" data-revoke="${esc(i.id)}">${t("Revoke")}</button>` : i.status === "used" ? `<button class="danger" data-delete-invite="${esc(i.id)}">${t("Delete")}</button>` : ""}</div></div>`,
             )
             .join("")
         : `<div class="empty">${icon("Invitations")}<h2>${t("No invitations yet")}</h2><p>${t("Create a private link to invite your first user.")}</p></div>`
     }</section><p class="help-line">${t("Single use · Valid for 7 days")}</p>`;
   $("#create-invitation").onclick = createInvitation;
+  document.querySelectorAll("[data-delete-invite]").forEach((b) => {
+    b.onclick = () => run(b, async () => {
+      await api(`/admin/invitations/${encodeURIComponent(b.dataset.deleteInvite)}/record`, {
+        method: "DELETE",
+      });
+      await invitations();
+    });
+  });
   document.querySelectorAll("[data-revoke]").forEach(
     (b) =>
       (b.onclick = () =>

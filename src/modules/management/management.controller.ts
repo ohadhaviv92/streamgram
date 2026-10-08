@@ -6,17 +6,23 @@ import {
   HttpCode,
   Param,
   Post,
+  Put,
   Req,
   Res,
   UnauthorizedException,
   UseGuards,
 } from "@nestjs/common";
-import { IsString, MaxLength, MinLength } from "class-validator";
+import { IsOptional, IsString, MaxLength, MinLength } from "class-validator";
 import { Request, Response } from "express";
 import { InstanceConfigService } from "../user/instance-config.service";
 import { ManagementService } from "./management.service";
 import { AdminGuard } from "./management.guards";
 import { AuthService } from "../auth/auth.service";
+import { UpdateNameDto } from "../user/dto/update-settings.dto";
+
+class CreateInvitationDto {
+  @IsOptional() @IsString() @MaxLength(80) name?: string;
+}
 
 class LoginDto {
   @IsString() @MinLength(1) @MaxLength(1024) password: string;
@@ -102,8 +108,22 @@ export class ManagementController {
 
   @Post("invitations")
   @UseGuards(AdminGuard)
-  createInvitation() {
-    return this.config.createInvitation();
+  createInvitation(@Body() body: CreateInvitationDto) {
+    return this.config.createInvitation(body?.name);
+  }
+
+  @Put("accounts/:token/name")
+  @UseGuards(AdminGuard)
+  updateAccountName(@Param("token") token: string, @Body() body: UpdateNameDto) {
+    this.config.updateUserName(token, body.name);
+    return { success: true };
+  }
+
+  @Delete("invitations/:id/record")
+  @UseGuards(AdminGuard)
+  deleteUsedInvitation(@Param("id") id: string) {
+    this.config.deleteUsedInvitation(id);
+    return { success: true };
   }
 
   @Delete("invitations/:id")
@@ -120,6 +140,6 @@ export class InvitationController {
   @Get(":secret")
   validate(@Param("secret") secret: string) {
     const record = this.config.validateInvitation(secret);
-    return { valid: true, expiresAt: record.expiresAt };
+    return { valid: true, expiresAt: record.expiresAt, name: record.name ?? "" };
   }
 }

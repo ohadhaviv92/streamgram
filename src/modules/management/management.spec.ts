@@ -177,6 +177,24 @@ describe("Persistence, passwords and invitations", () => {
     expect(c.getInvitations()[0]).not.toHaveProperty("secretHash");
     expect(invite.expiresAt - invite.createdAt).toBe(7 * 86400000);
   });
+  it("persists invitation names and deletes used records while retaining accounts", () => {
+    const c = instance();
+    const invite = c.createInvitation("  Alice  ");
+    const active = c.createInvitation();
+    expect(instance().validateInvitation(invite.secret).name).toBe("Alice");
+    const user = c.completeAuthentication(
+      { kind: "invitation", id: invite.id }, "+11111", "1", "s",
+    );
+    expect(user.name).toBe("Alice");
+    const users = c.getUsers();
+    expect(() => c.deleteUsedInvitation(active.id)).toThrow("Only used");
+    expect(() => c.deleteUsedInvitation("missing")).toThrow("not found");
+    c.deleteUsedInvitation(invite.id);
+    const restarted = instance();
+    expect(restarted.getInvitations().map((i) => i.id)).toEqual([active.id]);
+    expect(restarted.getUsers()).toEqual(users);
+    expect(() => restarted.validateInvitation(invite.secret)).toThrow("not found");
+  });
   it.each(["expired", "revoked", "used"])(
     "rejects %s invitations",
     (status) => {
@@ -409,6 +427,8 @@ describe("HTTP management and personal access", () => {
     ["/admin/invitations", "GET"],
     ["/admin/invitations", "POST"],
     ["/admin/invitations/id", "DELETE"],
+    ["/admin/invitations/id/record", "DELETE"],
+    ["/admin/accounts/token/name", "PUT"],
     ["/admin/accounts/token", "DELETE"],
     ["/cache/stats", "GET"],
     ["/cache/clear", "DELETE"],
@@ -423,6 +443,35 @@ describe("HTTP management and personal access", () => {
     expect([400, 401]).toContain(result.status);
     // Valid auth payloads reach the principal check; management guards run before DTO validation.
     if (!path.startsWith("/auth/qr")) expect(result.status).toBe(401);
+  });
+  it("creates named invitations and restricts account names to admins", async () => {
+    const created = await request("/admin/invitations", "POST", { name: " Alice " }, { cookie });
+    expect(created.status).toBe(201);
+    const invite = created.data;
+    const greeting = await request(`/invitations/${invite.secret}`);
+    expect(greeting.data).toMatchObject({ valid: true, name: "Alice" });
+    expect((await request("/admin/invitations", "POST", { name: "a".repeat(81) }, { cookie })).status).toBe(400);
+    expect((await request("/admin/invitations", "POST", { name: 123 }, { cookie })).status).toBe(400);
+    const user = config.completeAuthentication(
+      { kind: "invitation", id: invite.id }, "+11111", "1", "session",
+    );
+    const personalHeaders = { authorization: `Bearer ${user.token}` };
+    expect((await request("/settings", "GET", undefined, personalHeaders)).data).not.toHaveProperty("name");
+    const adminSettings = await request("/settings", "GET", undefined, { ...personalHeaders, cookie });
+    expect(adminSettings.data).toMatchObject({ canEditName: true, name: "Alice" });
+    expect((await request("/name", "PUT", { name: "Alice updated" }, { ...personalHeaders, cookie })).status).toBe(200);
+    expect(config.getUserByToken(user.token)?.name).toBe("Alice updated");
+    expect((await request("/name", "PUT", { name: "Changed" }, personalHeaders)).status).toBe(401);
+    expect((await request(`/admin/accounts/${user.token}/name`, "PUT", { name: "Changed" }, personalHeaders)).status).toBe(401);
+    expect((await request(`/admin/accounts/${user.token}/name`, "PUT", { name: "Changed" }, { cookie, origin: "https://evil.example" })).status).toBe(403);
+    expect((await request(`/admin/accounts/${user.token}/name`, "PUT", { name: "Changed" }, { cookie })).status).toBe(200);
+    expect((await request("/admin/accounts", "GET", undefined, { cookie })).data[0].name).toBe("Changed");
+    const path = `/admin/invitations/${invite.id}/record`;
+    expect((await request(path, "DELETE", undefined, { cookie, origin: "https://evil.example" })).status).toBe(403);
+    expect((await request(path, "DELETE", undefined, { cookie })).status).toBe(200);
+    expect(config.getInvitations()).toEqual([]);
+    expect(config.getUserByToken(user.token)?.name).toBe("Changed");
+    expect((await request(`/invitations/${invite.secret}`)).status).toBe(404);
   });
   it("returns only a public process identifier from the HTTPS probe", async () => {
     const result = await request("/setup/probe");

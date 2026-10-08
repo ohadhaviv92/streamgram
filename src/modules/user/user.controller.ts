@@ -22,7 +22,8 @@ import { ChannelsResponseDto } from "./dto/channels-response.dto";
 import { FoldersResponseDto } from "./dto/folders-response.dto";
 import { SettingsResponseDto } from "./dto/settings-response.dto";
 import { UserSettingsResponseDto } from "./dto/user-settings-response.dto";
-import { PersonalGuard } from "../management/management.guards";
+import { AdminGuard, PersonalGuard } from "../management/management.guards";
+import { ManagementService } from "../management/management.service";
 import { UpdateNameDto } from "./dto/update-settings.dto";
 import { logger } from "../../logger";
 
@@ -35,6 +36,7 @@ export class UserController {
     private readonly telegramService: TelegramNestService,
     private readonly cache: CacheService,
     private readonly instanceConfig: InstanceConfigService,
+    private readonly management: ManagementService,
   ) {}
 
   @Get("settings")
@@ -50,7 +52,10 @@ export class UserController {
 
     return {
       success: true,
-      name: this.instanceConfig.getUserByToken(profile.token)?.name ?? "",
+      canEditName: this.management.isAuthenticated(request),
+      ...(this.management.isAuthenticated(request)
+        ? { name: this.instanceConfig.getUserByToken(profile.token)?.name ?? "" }
+        : {}),
       language: profile.language,
       personalLanguage:
         this.instanceConfig.getUserByToken(profile.token)?.language ?? null,
@@ -95,6 +100,7 @@ export class UserController {
   }
 
   @Put("name")
+  @UseGuards(AdminGuard)
   @HttpCode(HttpStatus.OK)
   async updateName(
     @Body() body: UpdateNameDto,

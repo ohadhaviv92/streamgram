@@ -252,10 +252,11 @@ export class InstanceConfigService implements OnModuleInit {
     );
   }
 
-  createInvitation() {
+  createInvitation(name?: string) {
     const secret = crypto.randomBytes(32).toString("base64url");
     const record: InvitationRecord = {
       id: crypto.randomUUID(),
+      ...(name?.trim() ? { name: name.trim() } : {}),
       secretHash: this.invitationHash(secret),
       createdAt: Date.now(),
       expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
@@ -276,6 +277,7 @@ export class InstanceConfigService implements OnModuleInit {
   private invitationSummary(i: InvitationRecord) {
     return {
       id: i.id,
+      name: i.name ?? "",
       createdAt: i.createdAt,
       expiresAt: i.expiresAt,
       status:
@@ -321,6 +323,17 @@ export class InstanceConfigService implements OnModuleInit {
     });
   }
 
+  deleteUsedInvitation(id: string) {
+    const record = this.persisted.invitations?.find((i) => i.id === id);
+    if (!record) throw new NotFoundException("Invitation not found");
+    if (record.usedAt === undefined)
+      throw new BadRequestException("Only used invitation records can be deleted");
+    this.commit({
+      ...this.persisted,
+      invitations: (this.persisted.invitations ?? []).filter((i) => i.id !== id),
+    });
+  }
+
   /** No await between validation and atomic file replacement: invite use and user creation are one transaction. */
   completeAuthentication(
     owner: AuthOwner,
@@ -328,7 +341,9 @@ export class InstanceConfigService implements OnModuleInit {
     telegramId: string,
     sessionString: string,
   ): UserEntry {
-    if (owner.kind === "invitation") this.requireInvitation(owner.id);
+    const invitation = owner.kind === "invitation"
+      ? this.requireInvitation(owner.id)
+      : undefined;
     const users = { ...this.getUsers() };
     let existing = Object.values(users).find(
       (u) =>
@@ -352,6 +367,7 @@ export class InstanceConfigService implements OnModuleInit {
     }
     const entry = {
       ...existing,
+      ...(!existing && invitation?.name ? { name: invitation.name } : {}),
       token: existing?.token ?? generateUserToken(),
       phone,
       telegramId,
@@ -593,6 +609,9 @@ export class InstanceConfigService implements OnModuleInit {
         throw new Error("Invalid persisted invitation record");
       }
       const invitation = record as Record<string, unknown>;
+      if (invitation.name !== undefined &&
+          (typeof invitation.name !== "string" || invitation.name.length > 80))
+        throw new Error("Invalid persisted invitation name");
       if (
         typeof invitation.id !== "string" ||
         !invitation.id ||
