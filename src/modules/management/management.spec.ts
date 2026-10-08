@@ -539,15 +539,6 @@ describe("HTTP management and personal access", () => {
     jest.spyOn(Date, "now").mockReturnValue(Date.now() + 15 * 60 * 1000 + 1);
     expect((await request("/admin/login", "POST", { password: "test-password" })).status).toBe(200);
   });
-  it("separates client cooldowns when requests come through a trusted proxy", async () => {
-    app.getHttpAdapter().getInstance().set("trust proxy", ["loopback"]);
-    for (let i = 0; i < 5; i++) {
-      const result = await request("/admin/login", "POST", { password: "wrong" }, { "x-forwarded-for": "192.0.2.1" });
-      expect(result.status).toBe(i === 4 ? 429 : 401);
-    }
-    expect((await request("/admin/accounts", "GET", undefined, { "x-admin-password": "test-password", "x-forwarded-for": "192.0.2.1" })).status).toBe(429);
-    expect((await request("/admin/login", "POST", { password: "test-password" }, { "x-forwarded-for": "192.0.2.2" })).status).toBe(200);
-  });
   it("accepts a text API ID and preserves saved credentials when their fields are blank", async () => {
     expect(
       (await request("/setup/config", "POST", { apiId: "123456" }, { cookie }))

@@ -26,7 +26,7 @@ export class ManagementService {
     for (const [ip, failure] of this.passwordFailures) {
       if (failure.expires <= now) this.passwordFailures.delete(ip);
     }
-    // Express only honors forwarded addresses from explicitly trusted proxies.
+    // Use the connection IP; do not trust client-supplied forwarding headers.
     const ip = request.ip || request.socket.remoteAddress || "unknown";
     let failure = this.passwordFailures.get(ip);
     const rejectBlocked = (expires: number) => {

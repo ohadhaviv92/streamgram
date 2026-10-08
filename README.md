@@ -192,11 +192,8 @@ All values below are optional when using the setup wizard. Saved values in `data
 | `TMDB_BEARER_TOKEN`  | TMDB v4 Read Access Token.                                                                           |
 | `PREFERRED_LANGUAGE` | `en`, `he`, `ru`, or `ar`; defaults to `en`.                                                         |
 | `PORT`               | HTTP port; defaults to `3000`.                                                                       |
-| `TRUST_PROXY`        | Comma-separated trusted reverse proxy IPs/CIDRs. Unset by default; forwarded client IPs are ignored. |
 
 Admin password authentication blocks an IP for 15 minutes after five failures within 15 minutes. Login and `x-admin-password` requests share the counter; successful password verification resets it. Existing browser sessions remain usable. Counters are held in memory and reset on restart.
-
-Behind a reverse proxy, set `TRUST_PROXY` to only that proxy's addresses (for example, `loopback` for a proxy on the same host). Configure it to overwrite `X-Forwarded-For`, and prevent direct access to the application port. Without this setting, all clients behind a proxy share its IP and cooldown.
 
 ---
 

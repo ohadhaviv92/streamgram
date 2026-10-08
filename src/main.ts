@@ -17,12 +17,6 @@ async function bootstrap() {
     logger: ["error", "warn", "log"],
   });
   app.enableShutdownHooks();
-  if (process.env.TRUST_PROXY?.trim()) {
-    app.getHttpAdapter().getInstance().set(
-      "trust proxy",
-      process.env.TRUST_PROXY.split(",").map((proxy) => proxy.trim()).filter(Boolean),
-    );
-  }
   app.use((request: Request, response: Response, next: NextFunction) => {
     response.setHeader("Referrer-Policy", "no-referrer");
     if (

@@ -30,7 +30,7 @@ The session cookie is HttpOnly, SameSite=Strict, scoped to `/`, and Secure over 
 
 Browser management mutations must originate from the request origin or configured public origin. Configure the reverse proxy to overwrite forwarded protocol headers. Stremio's cross-origin GET/HEAD streaming remains available. Serve the dashboard and streaming endpoints over HTTPS.
 
-Admin login and `x-admin-password` authentication share a per-IP failure counter. Five failures within 15 minutes block further password verification for 15 minutes from the fifth failure, returning HTTP 429 with `Retry-After` in seconds. Successful verification resets the counter; missing credentials do not count, and existing browser sessions continue to work. The counter is process-local and resets on restart. Configure `TRUST_PROXY` with only your reverse proxy IPs/CIDRs and have the proxy overwrite `X-Forwarded-For` to apply cooldowns to individual client IPs.
+Admin login and `x-admin-password` authentication share a per-IP failure counter. Five failures within 15 minutes block further password verification for 15 minutes from the fifth failure, returning HTTP 429 with `Retry-After` in seconds. Successful verification resets the counter; missing credentials do not count, and existing browser sessions continue to work. The counter is process-local and resets on restart.
 
 ## Personal API
 
