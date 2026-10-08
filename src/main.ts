@@ -6,6 +6,7 @@ import { SwaggerModule, DocumentBuilder } from "@nestjs/swagger";
 import { Request, Response, NextFunction } from "express";
 import { AppModule } from "./app.module";
 import { logger } from "./logger";
+import { InstanceConfigService } from "./modules/user/instance-config.service";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -49,10 +50,16 @@ async function bootstrap() {
 
   await app.listen(port, host);
 
+  const dashboardUrl = (
+    app.get(InstanceConfigService).getConfig().publicUrl ||
+    `http://localhost:${port}`
+  ).replace(/\/+$/, "");
+
   logger.info(
     {
       port,
       host,
+      dashboard: `${dashboardUrl}/`,
       swagger: `http://${host === "0.0.0.0" ? "localhost" : host}:${port}/api`,
     },
     "NestJS server started",

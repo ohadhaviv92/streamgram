@@ -67,6 +67,7 @@ const TITLE_SPLIT_SYMBOLS = [":", "-"];
 @Injectable()
 export class TelegramNestService {
   private readonly activeControllers = new Set<AbortController>();
+  private readonly downloadCooldowns = new WeakMap<TelegramClient, number>();
 
   private TELEGRAM_CONFIG: any;
   private LANGUAGE_CONFIG: any;
@@ -1760,7 +1761,13 @@ export class TelegramNestService {
     }
 
     const totalBytesToSend = end - start + 1;
-    const requestSize = this.STREAMING_CONFIG.maxRequestSize; // Typically 1MB
+    const maxRequestSize = this.STREAMING_CONFIG.maxRequestSize;
+    // Avoid fetching a whole megabyte for small header/tail probes. Powers of
+    // two preserve Telegram's alignment and 1MB boundary requirements.
+    let requestSize = 4096;
+    while (requestSize < totalBytesToSend && requestSize < maxRequestSize) {
+      requestSize *= 2;
+    }
 
     // Telegram's upload.getFile forbids a request from crossing a 1MB boundary,
     // so with full-size (max) chunks the offset must be aligned to requestSize,
@@ -1784,17 +1791,13 @@ export class TelegramNestService {
       thumbSize: "",
     });
 
-    // Initialize a single iterator to handle the entire range request.
-    // This prevents the CPU-intensive process of opening a new connection for every chunk.
-    const iterator = client.iterDownload(fileLocation, {
-      offset: bigInt(alignedOffset),
-      limit: byteLimit,
-      requestSize: requestSize,
-      dcId: context.document.dcId,
-    });
+    const iterator = this.downloadStreamChunks(
+      client, fileLocation, context.document.dcId, alignedOffset,
+      byteLimit, requestSize, controller.signal,
+    );
 
     let bytesSent = 0;
-    let isFirstChunk = true;
+    let paddingRemaining = alignmentPadding;
 
     for await (const chunk of iterator as AsyncIterable<Buffer | Uint8Array>) {
       // Stop processing if the user disconnected or skipped forward/backward in the video
@@ -1807,10 +1810,11 @@ export class TelegramNestService {
 
       let buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
 
-      // Slice off the alignment padding ONLY from the very first chunk received
-      if (isFirstChunk && alignmentPadding > 0) {
-        buffer = buffer.subarray(alignmentPadding);
-        isFirstChunk = false;
+      // Discard alignment padding even if an iterator yields smaller chunks.
+      if (paddingRemaining > 0) {
+        const skipped = Math.min(paddingRemaining, buffer.length);
+        buffer = buffer.subarray(skipped);
+        paddingRemaining -= skipped;
       }
 
       // Calculate how many bytes we still need to send to satisfy the requested range
@@ -1832,6 +1836,86 @@ export class TelegramNestService {
       if (bytesSent >= totalBytesToSend) {
         break;
       }
+    }
+    if (!controller.signal.aborted && bytesSent !== totalBytesToSend) {
+      throw new Error(`Telegram stream ended early: expected ${totalBytesToSend} bytes, received ${bytesSent}`);
+    }
+  }
+
+  private async waitForDownloadCooldown(
+    client: TelegramClient,
+    signal: AbortSignal,
+  ): Promise<void> {
+    for (;;) {
+      signal.throwIfAborted();
+      const delay = (this.downloadCooldowns.get(client) ?? 0) - Date.now();
+      if (delay <= 0) return;
+      await new Promise<void>((resolve, reject) => {
+        const onAbort = () => {
+          clearTimeout(timer);
+          reject(signal.reason);
+        };
+        const timer = setTimeout(() => {
+          signal.removeEventListener("abort", onAbort);
+          resolve();
+        }, delay);
+        signal.addEventListener("abort", onAbort, { once: true });
+      });
+      // Another playback request may have extended the account's cooldown.
+    }
+  }
+
+  private async *downloadStreamChunks(
+    client: TelegramClient,
+    location: Api.InputDocumentFileLocation,
+    dcId: number,
+    offset: number,
+    limit: number,
+    requestSize: number,
+    signal: AbortSignal,
+  ): AsyncGenerator<Buffer> {
+    let downloaded = 0;
+    while (downloaded < limit) {
+      let result: Api.upload.TypeFile | undefined;
+      for (let attempt = 0; ; attempt++) {
+        await this.waitForDownloadCooldown(client, signal);
+        try {
+          // iterDownload in teleproto 1.229.1 does not forward its signal to
+          // invoke. Use the managed client directly so RPCs are cancellable.
+          result = await client.invoke(new Api.upload.GetFile({
+            location, offset: bigInt(offset + downloaded),
+            limit: requestSize, precise: true,
+          }), dcId, { abortSignal: signal, floodSleepThreshold: 0 });
+          break;
+        } catch (error) {
+          signal.throwIfAborted();
+          const rpcError = error as { errorMessage?: string; seconds?: number; newDc?: number };
+          const flood = /^FLOOD_(?:PREMIUM_)?WAIT_\d+$/.test(rpcError.errorMessage ?? "");
+          const seconds = rpcError.seconds;
+          if (flood && typeof seconds === "number" && seconds > 0 && seconds <= 60) {
+            this.downloadCooldowns.set(client, Math.max(
+              this.downloadCooldowns.get(client) ?? 0, Date.now() + seconds * 1000,
+            ));
+            if (attempt >= 5) throw error;
+            logger.warn({ seconds }, "Telegram download rate limited; pausing account downloads");
+            continue;
+          }
+          if (rpcError.errorMessage?.startsWith("FILE_MIGRATE_") &&
+              typeof rpcError.newDc === "number" && attempt < 5) {
+            dcId = rpcError.newDc;
+            continue;
+          }
+          throw error;
+        }
+      }
+      signal.throwIfAborted();
+      if (!(result instanceof Api.upload.File)) {
+        throw new Error("CDN redirects are not supported by streaming downloads");
+      }
+      if (!result.bytes.length) return;
+      downloaded += result.bytes.length;
+      yield result.bytes;
+      if (result.bytes.length < requestSize) return;
     }
   }
 

@@ -18,6 +18,7 @@ import {
 } from "@nestjs/swagger";
 import { Request, Response } from "express";
 import { Readable } from "stream";
+import { pipeline } from "stream/promises";
 import { ConfigService } from "@nestjs/config";
 import { StreamHandlerService } from "./stream-handler.service";
 import { InstanceProfileGuard } from "../../common/guards/instance-profile.guard";
@@ -773,132 +774,116 @@ export class StreamController {
     const { chatId, messageId } = params;
     const user = req.user;
 
+    const controller = this.telegramService.createStreamSession();
+    let stream: Readable | undefined;
+    // IncomingMessage.close also fires when the GET request finishes reading.
+    // Only the response connection tells us whether playback disconnected.
+    const onClose = () => {
+      // Pipeline also closes the response on upstream errors; keep those visible
+      // to the catch block instead of classifying them as player disconnects.
+      if (!res.writableFinished && !stream?.errored) controller.abort();
+      stream?.destroy();
+    };
+    res.once("close", onClose);
+    // Disable socket inactivity timeouts only for this long-lived response.
+    res.setTimeout(0);
+
     try {
-      // Get user's Telegram client
       const client = await this.telegramService.getClientForUser(
         user.token,
         user.session_string,
       );
-
-      const controller = this.telegramService.createStreamSession();
-
-      const release = async () => {
-        await this.telegramService.releaseStreamSession(controller);
-      };
-
       const message = await this.telegramService.getMessageWithCache(
         client,
         chatId,
         Number(messageId),
       );
+      if (controller.signal.aborted || res.destroyed) return;
 
       if (!this.telegramService.hasStreamableMedia(message)) {
         res.status(400).json({ error: "Message does not contain a video" });
-        await release();
         return;
       }
-
       const fileSize = this.telegramService.getFileSize(message);
-
-      if (!fileSize) {
+      if (!Number.isSafeInteger(fileSize) || fileSize <= 0) {
         res.status(404).json({ error: "Unable to determine file size" });
-        await release();
         return;
       }
 
-      const rangeHeader = req.headers.range;
       let start = 0;
       let end = fileSize - 1;
-
-      if (rangeHeader) {
-        const match = /bytes=(\d+)-(\d*)/.exec(rangeHeader);
-        if (match) {
-          start = Number(match[1]);
-          if (match[2]) {
-            end = Number(match[2]);
-          }
+      let status = 200;
+      // HEAD describes the full representation; Range applies to GET only.
+      // Ignore If-Range without a validator, returning the full representation.
+      if (
+        req.method === "GET" &&
+        req.headers.range?.startsWith("bytes=") &&
+        !req.headers["if-range"]
+      ) {
+        const ranges = req.range(fileSize, { combine: true });
+        if (ranges === -1) {
+          res.status(416).set({
+            "Content-Range": `bytes */${fileSize}`,
+            "Content-Length": "0",
+          }).end();
+          return;
+        }
+        // Ignore malformed/unknown units and multiple ranges (no multipart support).
+        if (
+          ranges && ranges !== -2 &&
+          ranges.type === "bytes" && ranges.length === 1
+        ) {
+          ({ start, end } = ranges[0]);
+          status = 206;
         }
       }
 
-      if (end >= fileSize) {
-        end = fileSize - 1;
-      }
-      const userAgent = req.headers["user-agent"] || "unknown";
-      const isFusion = userAgent.startsWith("DiffusionApp");
-      const isaArvio = userAgent.startsWith("stagefright");
-      // Limit range to maximum 5MB per request
-      const maxChunkSize = 10 * 1024 * 1024; // 5MB
-      if (!isFusion && !isaArvio && end - start + 1 > maxChunkSize) {
-        end = start + maxChunkSize - 1;
-      }
-
-      const contentLength = end - start + 1;
-      const status = rangeHeader ? 206 : 200;
-      const contentType = this.telegramService.getContentType(message);
-
-      res.status(status);
-      res.set({
-        "Content-Type": contentType,
-        "Content-Length": String(contentLength),
+      res.status(status).set({
+        "Content-Type": this.telegramService.getContentType(message),
+        "Content-Length": String(end - start + 1),
         "Accept-Ranges": "bytes",
+        "Cache-Control": "no-store, no-transform",
+        "X-Accel-Buffering": "no",
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
         "Access-Control-Allow-Headers": "Range, Content-Type",
         "Access-Control-Expose-Headers":
           "Content-Length, Content-Range, Accept-Ranges",
       });
-
       if (status === 206) {
         res.set("Content-Range", `bytes ${start}-${end}/${fileSize}`);
       }
-
-      const stream = Readable.from(
-        this.telegramService.streamMessageRange(
-          client,
-          message,
-          start,
-          end,
-          controller,
-        ),
-      );
-
-      // Handle client disconnect - destroy stream and release resources
-      req.on("close", () => {
-        if (stream && !stream.destroyed) {
-          stream.destroy();
-        }
-        release().catch((error) =>
-          logger.warn({ error }, "Failed to release stream session on close"),
-        );
-      });
-
-      stream.on("error", async (error: unknown) => {
-        logger.error({ err: error }, "Streaming error");
-        if (stream && !stream.destroyed) {
-          stream.destroy();
-        }
-        if (!res.headersSent) {
-          res.status(500).end();
-        } else {
-          res.end();
-        }
-        await release();
-      });
-
-      res.on("finish", () => {
-        release().catch((err) =>
-          logger.warn({ err }, "Failed to release stream session on finish"),
-        );
-      });
-
-      stream.pipe(res);
-    } catch (error) {
-      logger.error({ err: error, chatId, messageId }, "Failed to stream video");
-      if (!res.headersSent) {
-        res.status(500).json({ error: (error as Error).message });
-      } else {
+      if (req.method === "HEAD") {
         res.end();
+        return;
       }
+
+      // One HTTP body for the entire requested range, independent of Telegram
+      // RPC chunk size. Pipeline provides backpressure and propagates failures.
+      stream = Readable.from(
+        this.telegramService.streamMessageRange(
+          client, message, start, end, controller,
+        ),
+        { objectMode: false },
+      );
+      await pipeline(stream, res);
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        logger.error({ err: error, chatId, messageId }, "Failed to stream video");
+      }
+      if (!res.destroyed) {
+        if (!res.headersSent) {
+          res.removeHeader("Content-Length");
+          res.removeHeader("Content-Range");
+          res.status(500).json({ error: "Unable to stream video" });
+        } else {
+          // A truncated body must fail, rather than look like a successful EOF.
+          res.destroy();
+        }
+      }
+    } finally {
+      res.removeListener("close", onClose);
+      await this.telegramService.releaseStreamSession(controller);
     }
   }
 
