@@ -1,5 +1,5 @@
 import { checksCard, bindChecks } from "./checks.js";
-import { t } from "./i18n.js";
+import { t, language } from "./i18n.js";
 import {
   $,
   api,
@@ -52,6 +52,7 @@ export async function setup() {
         initialized = true;
         protection.adminPassword = "";
         config = await api("/setup/admin-status");
+        config.preferredLanguage = language;
         credentials();
       });
     };

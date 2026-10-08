@@ -504,8 +504,8 @@ export class InstanceConfigService implements OnModuleInit {
     const candidate = this.firstNonEmpty(
       this.persisted.preferredLanguage,
       process.env.PREFERRED_LANGUAGE,
-      this.configService.get<string>("language.preferredLanguage", "he"),
-      "he",
+      this.configService.get<string>("language.preferredLanguage", "en"),
+      "en",
     );
 
     return ["en", "he", "ru", "ar"].includes(candidate)

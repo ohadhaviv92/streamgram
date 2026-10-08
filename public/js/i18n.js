@@ -1,4 +1,8 @@
+import { ru, ar } from "./translations.js";
 const he = {
+  "English is always searched. Selecting another language adds searches in that language.": "החיפוש תמיד כולל אנגלית. בחירת שפה נוספת מוסיפה חיפושים בשפה זו.",
+  "Removes cached search results, message details, folders, and channel video lists for all accounts.": "מסיר תוצאות חיפוש, פרטי הודעות, תיקיות ורשימות סרטונים בערוצים מהמטמון של כל החשבונות.",
+  "Regenerate QR code": "יצירת קוד QR חדש",
   "Connections need attention": "יש בעיות בחיבורים",
   "Connections could not be verified": "לא ניתן לאמת את החיבורים",
   "Open Settings": "פתיחת ההגדרות",
@@ -56,7 +60,6 @@ const he = {
   "Welcome back": "ברוכים השבים",
   "Sign in to manage your StreamGram instance.":
     "היכנסו כדי לנהל את מופע StreamGram שלכם.",
-  "Your Telegram. Your Stream.": "הטלגרם שלכם. הסטרים שלכם.",
   "Manage your Telegram accounts and Stremio connections in one place.":
     "נהלו את חשבונות הטלגרם והחיבורים לסטרימיו במקום אחד.",
   "Add account": "הוספת חשבון",
@@ -201,8 +204,8 @@ const he = {
   "Your connection has been removed.": "החיבור שלכם הוסר.",
   "QR code": "קוד QR",
   "Phone code": "קוד לטלפון",
-  "Open Telegram → Settings → Devices → Link Desktop Device.":
-    "פתחו טלגרם ← הגדרות ← מכשירים ← קישור מכשיר.",
+  "Open Telegram → Settings → Devices → Add Device → Scan QR code.":
+    "פתחו טלגרם ← הגדרות ← מכשירים ← הוספת מכשיר ← סריקת קוד QR.",
   "Generate QR code": "יצירת קוד QR",
   "Phone number": "מספר טלפון",
   "Send code": "שליחת קוד",
@@ -223,7 +226,7 @@ const he = {
   "Code sent to your Telegram app": "הקוד נשלח לאפליקציית הטלגרם שלכם",
   "Code sent via SMS": "הקוד נשלח בהודעת SMS",
   Continue: "המשך",
-  "Waiting for Telegram…": "ממתינים לטלגרם…",
+  "Waiting to connect…": "ממתינים לחיבור…",
   "QR code expired. Generate a new one.": "תוקף קוד ה־QR פג. צרו קוד חדש.",
   "Welcome to StreamGram": "ברוכים הבאים ל־StreamGram",
   "A few steps to your own streaming dashboard.":
@@ -267,12 +270,18 @@ const he = {
   "Ready to install": "מוכן להתקנה",
   "Skip to content": "דילוג לתוכן",
 };
-export const language =
-  localStorage.getItem("streamgram-ui-language") ||
-  (navigator.language.startsWith("he") ? "he" : "en");
-export const t = (text) => (language === "he" ? he[text] || text : text);
+export const supportedLanguages = { en: "English", he: "עברית", ru: "Русский", ar: "العربية" };
+const supported = (value) => Object.hasOwn(supportedLanguages, value);
+const urlLanguage = new URLSearchParams(location.search).get("lng");
+const savedLanguage = localStorage.getItem("streamgram-ui-language");
+export const language = supported(urlLanguage)
+  ? urlLanguage
+  : supported(savedLanguage)
+    ? savedLanguage
+    : "en";
+export const t = (text) => ({ he, ru, ar }[language]?.[text] || text);
 export function applyLanguage() {
   document.documentElement.lang = language;
-  document.documentElement.dir = language === "he" ? "rtl" : "ltr";
+  document.documentElement.dir = ["he", "ar"].includes(language) ? "rtl" : "ltr";
   document.querySelector(".skip").textContent = t("Skip to content");
 }

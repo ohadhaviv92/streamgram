@@ -20,7 +20,8 @@
     "start:prod": "node dist/main.js",
     "lint": "eslint \"src/**/*.ts\"",
     "test": "jest",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "test:dashboard": "node --test tests/dashboard.test.cjs"
   },
   "dependencies": {
     "@nestjs/cache-manager": "^3.1.0",

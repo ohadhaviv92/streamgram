@@ -1,4 +1,4 @@
-import { t, language } from "./i18n.js";
+import { t, language, supportedLanguages } from "./i18n.js";
 export const $ = (selector, root = document) => root.querySelector(selector);
 export const esc = (value) =>
   String(value ?? "").replace(
@@ -51,11 +51,14 @@ export function shell(mode = "", tab = "") {
         `<a href="#${label.toLowerCase()}" ${tab === label ? 'aria-current="page"' : ""}>${icon(label)}${t(label)}</a>`,
     )
     .join("");
+  const languageControl = `<label class="sr-only" for="ui-language">${t("Interface language")}</label><select id="ui-language">${Object.entries(supportedLanguages).map(([value, label]) => `<option value="${value}" ${language === value ? "selected" : ""}>${label}</option>`).join("")}</select>`;
   $("#app").innerHTML =
-    `<div class="${mode === "admin" ? "shell" : "standalone"}">${mode === "admin" ? `<aside>${brand}<nav aria-label="${t("Management")}">${nav}</nav><div class="aside-footer">StreamGram<br>${t("Your Telegram. Your Stream.")}</div></aside>` : ""}<div><header>${mode === "admin" ? `<span class="crumb">StreamGram / ${t(tab)}</span>` : brand}<div class="toolbar"><label class="sr-only" for="ui-language">${t("Interface language")}</label><select id="ui-language"><option value="en" ${language === "en" ? "selected" : ""}>English</option><option value="he" ${language === "he" ? "selected" : ""}>עברית</option></select>${mode === "admin" ? button("Sign out", "signout", "ghost") : ""}</div></header><main id="main" tabindex="-1"></main></div></div>`;
+    `<div class="${mode === "admin" ? "shell" : "standalone"}">${mode === "admin" ? `<aside>${brand}<nav aria-label="${t("Management")}">${nav}</nav><div class="aside-footer">${languageControl}${button("Sign out", "signout", "ghost")}</div></aside>` : ""}<div>${mode === "admin" ? "" : `<header>${brand}<div class="toolbar">${languageControl}</div></header>`}<main id="main" tabindex="-1"></main></div></div>`;
   $("#ui-language").onchange = (e) => {
     localStorage.setItem("streamgram-ui-language", e.target.value);
-    location.reload();
+    const url = new URL(location.href);
+    url.searchParams.set("lng", e.target.value);
+    location.assign(url.href);
   };
   if ($("#signout"))
     $("#signout").onclick = () =>
@@ -176,7 +179,7 @@ export async function confirmAction(title, text, action = "Delete") {
   });
 }
 export function pageHead(title, description, action = "") {
-  return `<div class="page-head"><div><h1>${t(title)}</h1><p>${t(description)}</p></div>${action}</div>`;
+  return `<div class="page-head"><div>${title ? `<h1>${t(title)}</h1>` : ""}<p>${t(description)}</p></div>${action}</div>`;
 }
 export function installCard(manifest) {
   return `<section class="card install"><div class="eyebrow">${t("Ready to install")}</div><h2>${t("Ready when you are.")}</h2><p>${t("Connect your Telegram library to Stremio. Catalogs are optional.")}</p><a class="btn primary" href="${esc(manifest.replace(/^https?:\/\//, "stremio://"))}">${icon("play")}${t("Install in Stremio")}</a><label for="manifest-url">${t("Manifest URL")}</label><div class="copy-field"><input id="manifest-url" readonly value="${esc(manifest)}">${button("Copy manifest", "copy-manifest", "", "copy")}</div><p class="hint">${t("Keep this link private. It grants access to your account.")}</p></section>`;

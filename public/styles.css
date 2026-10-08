@@ -242,6 +242,7 @@ aside {
   position: sticky;
   top: 0;
   height: 100vh;
+  overflow-y: auto;
 }
 nav {
   display: flex;
@@ -273,8 +274,13 @@ html[dir="rtl"] nav a[aria-current="page"] {
 }
 .aside-footer {
   margin-top: auto;
-  font-size: 0.8rem;
-  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.aside-footer select,
+.aside-footer button {
+  width: 100%;
 }
 header {
   min-height: 80px;
@@ -293,10 +299,6 @@ header {
 .toolbar select {
   width: auto;
   min-width: 95px;
-  font-size: 0.85rem;
-}
-.crumb {
-  color: var(--muted);
   font-size: 0.85rem;
 }
 main {
@@ -870,13 +872,13 @@ details[open] summary {
     padding: 10px 4px;
     font-size: 0.75rem;
   }
-  aside .brand small,
-  .aside-footer {
+  aside .brand small {
     display: none;
   }
-  .shell header {
-    min-height: 64px;
-    padding: 12px 20px;
+  .aside-footer {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
   }
   main,
   .standalone main {
@@ -916,9 +918,6 @@ details[open] summary {
   }
   .row .actions {
     margin-inline-start: 0;
-  }
-  .crumb {
-    display: none;
   }
   .toolbar {
     margin-inline-start: auto;
@@ -965,4 +964,13 @@ details[open] summary {
 
 .page-head > div {
   min-width: 0;
+}
+
+.qr-expired {
+  color: var(--red);
+  font-weight: 600;
+}
+
+#generate[hidden] {
+  display: none;
 }

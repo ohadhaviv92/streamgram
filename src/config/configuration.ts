@@ -26,7 +26,7 @@ export default () => ({
   },
   language: {
     defaultLanguage: "en",
-    preferredLanguage: process.env.PREFERRED_LANGUAGE || "he",
+    preferredLanguage: process.env.PREFERRED_LANGUAGE || "en",
     languages: {
       en: {
         name: "english",

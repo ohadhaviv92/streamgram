@@ -150,7 +150,10 @@ Add `--env-file .env` to `docker run` when supplying environment variables inste
 
 After initialization, `/` opens the admin dashboard with Overview, Accounts, Invitations, Settings, and Tutorials. Admins can connect accounts directly or create seven-day, single-use invitations. Copy an invitation when it is created; its secret is not shown again.
 
-Each account has a personal page at `/{user_token}/configure` (the existing `/?action=settings&token=…` link also works). It manages only that account's display name, search language, optional catalogs, reconnection, and deletion. Personal language inherits the instance default unless overridden. English, Hebrew, Russian, and Arabic search remain supported; the dashboard supports English and Hebrew with RTL.
+Each account has a personal page at `/{user_token}/configure` (the existing `/?action=settings&token=…` link also works). It manages only that account's display name, search language, optional catalogs, reconnection, and deletion. Personal language inherits the instance default unless overridden. English, Hebrew, Russian, and Arabic search remain supported; the dashboard supports all four languages, with RTL for Hebrew and Arabic. English is always searched; selecting Hebrew, Russian, or Arabic adds searches in that language. The instance search language defaults to English. During first-run setup, the search-language dropdown initially matches the dashboard language.
+
+Set the dashboard language using `?lng=en`, `?lng=he`, `?lng=ru`, or `?lng=ar` (for example, `https://yourdomain.com/?lng=he`). For links that already have query parameters, append `&lng=he`. A valid URL language overrides the saved browser preference; otherwise the dashboard uses the saved preference or English. The dashboard language selector updates the URL and saves the preference. Interface language and search language can be changed independently.
+
 
 Private account links grant access without a separate user password. Protected management uses an eight-hour browser session; legacy `X-Admin-Password` clients remain supported. Existing installations without an admin password stay unprotected until you enable protection in Settings. Removing all accounts never reopens public first-run setup.
 
@@ -188,7 +191,7 @@ All values below are optional when using the setup wizard. Saved values in `data
 | `TELEGRAM_API_ID`    | Telegram API ID from [my.telegram.org](https://my.telegram.org).                               |
 | `TELEGRAM_API_HASH`  | Telegram API hash from [my.telegram.org](https://my.telegram.org).                             |
 | `TMDB_BEARER_TOKEN`  | TMDB v4 Read Access Token.                                                                     |
-| `PREFERRED_LANGUAGE` | `en`, `he`, `ru`, or `ar`; defaults to `he`.                                                   |
+| `PREFERRED_LANGUAGE` | `en`, `he`, `ru`, or `ar`; defaults to `en`.                                                   |
 | `PORT`               | HTTP port; defaults to `3000`.                                                                 |
 
 ---

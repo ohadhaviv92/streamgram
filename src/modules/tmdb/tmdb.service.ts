@@ -91,7 +91,7 @@ export class TmdbService {
     this.baseUrl = this.configService.get<string>("tmdb.baseUrl", "");
     this.fallbackPreferredLanguage = this.configService.get<string>(
       "language.preferredLanguage",
-      "he",
+      "en",
     );
     this.fallbackDefaultLanguage = this.configService.get<string>(
       "language.defaultLanguage",

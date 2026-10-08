@@ -68,7 +68,7 @@ export async function admin() {
         );
         $("#main").innerHTML =
           pageHead(
-            "Your Telegram. Your Stream.",
+            "Overview",
             "Manage your Telegram accounts and Stremio connections in one place.",
             button("Add account", "add-account", "primary", "plus"),
           ) +
@@ -173,6 +173,7 @@ async function createInvitation() {
     const invite = await api("/admin/invitations", { method: "POST" });
     const url = new URL("/", location.origin);
     url.searchParams.set("invite", invite.secret);
+    if (language !== "en") url.searchParams.set("lng", language);
     const d = dialog(
       "Invitation ready",
       `<p>${t("Copy this link now. It is shown only once.")}</p><label for="invite-url">${t("Copy link")}</label><input id="invite-url" dir="ltr" readonly value="${esc(url.href)}"><p class="hint">${t("Single use · Valid for 7 days")}</p><div class="actions" style="margin-top:20px">${button("Copy link", "copy-invite", "primary", "copy")}${navigator.share ? button("Share link", "share-invite") : ""}</div>`,

@@ -5,13 +5,15 @@ export function connect(context, onConnected) {
     context.token ? "Reconnect Telegram" : "Connect Telegram",
     `<div class="segmented"><button id="qr-mode" aria-pressed="true">${t("QR code")}</button><button id="phone-mode" aria-pressed="false">${t("Phone code")}</button></div><div id="auth-content"></div>`,
   );
-  let timer,
+  let expiryTimer,
+    timer,
     qrToken,
     attemptId,
     phone,
     generation = 0;
   const clear = () => {
     clearTimeout(timer);
+    clearTimeout(expiryTimer);
     generation++;
   };
   d.addEventListener("close", clear);
@@ -25,58 +27,79 @@ export function connect(context, onConnected) {
     $("#qr-mode", d).setAttribute("aria-pressed", "true");
     $("#phone-mode", d).setAttribute("aria-pressed", "false");
     $("#auth-content", d).innerHTML =
-      `<p>${t("Open Telegram → Settings → Devices → Link Desktop Device.")}</p><div id="qr-output"></div>${button("Generate QR code", "generate", "primary")}<p id="qr-status" role="status"></p><form id="qr-password" hidden><div class="field"><label for="q-password">${t("Telegram password")}</label><input id="q-password" type="password" autocomplete="current-password" required></div><button class="primary">${t("Continue")}</button></form>`;
-    $("#generate", d).onclick = () =>
-      run(
-        $("#generate", d),
-        async () => {
-          clear();
-          const epoch = generation;
-          const data = await api("/auth/qr/generate", {
-            method: "POST",
-            ...context,
-          });
+      `<p>${t("Open Telegram → Settings → Devices → Add Device → Scan QR code.")}</p><div id="qr-output"></div>${button("Generate QR code", "generate", "primary")}<p id="qr-status" role="status"></p><form id="qr-password" hidden><div class="field"><label for="q-password">${t("Telegram password")}</label><input id="q-password" type="password" autocomplete="current-password" required></div><button class="primary">${t("Continue")}</button></form>`;
+    const regenerate = $("#generate", d);
+    regenerate.textContent = t("Regenerate QR code");
+    regenerate.hidden = true;
+    const statusLine = $("#qr-status", d);
+    const expire = () => {
+      clearTimeout(timer);
+      clearTimeout(expiryTimer);
+      statusLine.textContent = t("QR code expired. Generate a new one.");
+      statusLine.className = "qr-expired";
+      $("#qr-output", d).replaceChildren();
+      $("#qr-password", d).hidden = true;
+      regenerate.textContent = t("Regenerate QR code");
+      regenerate.hidden = false;
+    };
+    async function generate() {
+      clear();
+      const epoch = generation;
+      regenerate.hidden = true;
+      statusLine.className = "";
+      statusLine.textContent = t("Loading…");
+      $("#qr-output", d).replaceChildren();
+      $("#qr-password", d).hidden = true;
+      try {
+        const data = await api("/auth/qr/generate", { method: "POST", ...context });
+        if (!d.open || epoch !== generation) return;
+        qrToken = data.qrToken;
+        const img = document.createElement("img");
+        img.className = "qr";
+        img.alt = t("QR code");
+        img.src = data.qrCodeImage;
+        $("#qr-output", d).replaceChildren(img);
+        statusLine.textContent = t("Waiting to connect…");
+        expiryTimer = setTimeout(() => {
+          if (d.open && epoch === generation) expire();
+        }, data.expiresIn * 1000);
+        async function poll() {
           if (!d.open || epoch !== generation) return;
-          qrToken = data.qrToken;
-          const img = document.createElement("img");
-          img.className = "qr";
-          img.alt = t("QR code");
-          img.src = data.qrCodeImage;
-          $("#qr-output", d).replaceChildren(img);
-          $("#qr-status", d).textContent = t("Waiting for Telegram…");
-          $("#qr-password", d).hidden = true;
-          const deadline = Date.now() + data.expiresIn * 1000;
-          async function poll() {
-            if (!d.open || epoch !== generation) return;
-            if (Date.now() >= deadline) {
-              $("#qr-status", d).textContent = t(
-                "QR code expired. Generate a new one.",
-              );
+          try {
+            const status = await api(`/auth/qr/status/${qrToken}`, context);
+            if (status.user) {
+              await complete(status);
               return;
             }
-            try {
-              const status = await api(`/auth/qr/status/${qrToken}`, context);
-              if (status.user) {
-                await complete(status);
-                return;
-              }
-              if (!d.open || epoch !== generation) return;
-              if (status.passwordRequired) {
-                $("#qr-password", d).hidden = false;
-                $("#q-password", d).focus();
-                $("#qr-status", d).textContent = t("Telegram password");
-                return;
-              }
+            if (!d.open || epoch !== generation || !regenerate.hidden) return;
+            if (status.passwordRequired) {
+              clearTimeout(expiryTimer);
+              $("#qr-output", d).replaceChildren();
+              $("#qr-password", d).hidden = false;
+              $("#q-password", d).focus();
+              statusLine.textContent = t("Telegram password");
+              return;
+            }
+            timer = setTimeout(poll, 2000);
+          } catch (error) {
+            if (!d.open || epoch !== generation || !regenerate.hidden) return;
+            if (error.message === "Authentication expired. Start again.") expire();
+            else {
+              errorMessage(error, $(".dialog-body", d));
               timer = setTimeout(poll, 2000);
-            } catch (error) {
-              if (d.open && epoch === generation)
-                errorMessage(error, $(".dialog-body", d));
             }
           }
-          timer = setTimeout(poll, 2000);
-        },
-        $(".dialog-body", d),
-      );
+        }
+        timer = setTimeout(poll, 2000);
+      } catch (error) {
+        if (!d.open || epoch !== generation) return;
+        statusLine.textContent = "";
+        errorMessage(error, $(".dialog-body", d));
+        regenerate.textContent = t("Retry");
+        regenerate.hidden = false;
+      }
+    }
+    regenerate.onclick = generate;
     $("#qr-password", d).onsubmit = (e) => {
       e.preventDefault();
       run(
@@ -92,6 +115,7 @@ export function connect(context, onConnected) {
         $(".dialog-body", d),
       );
     };
+    void generate();
   }
   function phoneMode() {
     clear();
