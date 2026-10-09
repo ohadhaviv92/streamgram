@@ -45,7 +45,7 @@ export class DashboardController {
   @Header("Content-Type", "text/html; charset=utf-8")
   dashboard(@Req() request: Request): string {
     const baseUrl = this.instanceConfig.getConfig().publicUrl ||
-      this.config.get<string>("server.streamHost", "") ||
+      this.config.get<string>("server.publicUrl", "") ||
       `${request.protocol}://${request.get("host")}`;
     return addPreviewMetadata(this.html, baseUrl);
   }

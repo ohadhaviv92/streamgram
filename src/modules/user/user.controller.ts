@@ -237,7 +237,7 @@ export class UserController {
   private getBaseUrl(request: Request): string {
     const configured =
       this.instanceConfig.getConfig().publicUrl ||
-      this.configService.get<string>("server.streamHost", "");
+      this.configService.get<string>("server.publicUrl", "");
     const host = configured || `${request.protocol}://${request.get("host")}`;
     return host.replace(/\/$/, "");
   }

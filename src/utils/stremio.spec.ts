@@ -14,7 +14,7 @@ jest.mock("../config/configuration", () => ({
     server: {
       host: "localhost",
       port: 3000,
-      streamHost: "https://test.example.com",
+      publicUrl: "https://test.example.com",
     },
     language: {
       preferredLanguage: "en",

@@ -62,7 +62,7 @@ export class StreamController {
   private getBaseUrl(userToken?: string): string {
     const host =
       this.instanceConfig.getConfig().publicUrl ||
-      this.configService.get<string>("server.streamHost");
+      this.configService.get<string>("server.publicUrl");
     const port = this.configService.get<number>("server.port");
     let baseUrl = host || `http://localhost:${port}`;
 

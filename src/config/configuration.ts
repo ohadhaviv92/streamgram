@@ -6,7 +6,7 @@ export default () => ({
   server: {
     host: "0.0.0.0",
     port: parseInt(process.env.PORT || "3000", 10),
-    streamHost: process.env.PUBLIC_URL || process.env.STREAM_HOST || "",
+    publicUrl: process.env.PUBLIC_URL || "",
     nodeEnv: process.env.NODE_ENV || "production",
   },
   tmdb: {

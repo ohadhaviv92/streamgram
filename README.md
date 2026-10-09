@@ -113,6 +113,8 @@ InstaPods is the easiest way to self-host StreamGram — no server setup, no ter
 
 ## Local Installation
 
+Stremio needs a publicly reachable **domain with HTTPS** for addon and stream URLs. Local HTTP access is useful for setup, but use a public HTTPS URL when installing the addon in Stremio. We recommend [your own domain with Caddy](#recommended-domain--https-with-caddy) for automatic HTTPS. You can also use InstaPods' included HTTPS URL, or [Tailscale Funnel](#alternative-tailscale-funnel) for a provided domain and certificate.
+
 ```bash
 git clone https://github.com/ohadhaviv92/streamgram.git
 cd streamgram
@@ -138,6 +140,81 @@ docker logs -f streamgram
 Open `http://<server-ip>:3000/` to use the setup wizard. If the bridge is behind a reverse proxy, open the wizard through the public HTTPS domain instead.
 
 Add `--env-file .env` to `docker run` when supplying environment variables instead of using the setup wizard.
+
+---
+
+## Public Domain & HTTPS
+
+The Stremio addon needs a publicly reachable **domain and HTTPS** for addon and stream URLs. We recommend a domain or subdomain with Caddy for regular streaming. Tailscale Funnel is an alternative that supplies both a domain and HTTPS, but its bandwidth limits can reduce streaming speed. InstaPods already includes a public HTTPS URL.
+
+### Recommended: Domain + HTTPS with Caddy
+
+1. **Point a domain at your server.** Use a domain you own (for example, `streamgram.example.com`) or a free [DuckDNS subdomain](https://www.duckdns.org/why.jsp). Set its DNS A record to your server's public IPv4 address; only add an AAAA record if IPv6 reaches that server. With DuckDNS, keep the IP updated using its updater. DNS alone does not enable HTTPS.
+2. **Make ports reachable.** Allow inbound TCP ports **80 and 443** in the server/cloud firewall. On a home network, forward both ports to the host running Caddy. This setup requires a reachable public IP; behind CGNAT, use Funnel or a server with a public IP.
+3. **Install Caddy on the StreamGram host** (Debian/Ubuntu):
+
+   ```bash
+   sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl gnupg
+   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+   sudo chmod o+r /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+   sudo chmod o+r /etc/apt/sources.list.d/caddy-stable.list
+   sudo apt update
+   sudo apt install -y caddy
+   ```
+
+   The package runs Caddy as a system service. For other systems, see the [official installation guide](https://caddyserver.com/docs/install).
+
+4. **Configure the proxy.** With StreamGram running on port `3000`, edit `sudo nano /etc/caddy/Caddyfile` and add the following site block (replace the default example site on a fresh install; preserve any other sites):
+
+   ```caddyfile
+   streamgram.example.com {
+       reverse_proxy 127.0.0.1:3000
+   }
+   ```
+
+   Replace the domain with yours and `3000` with the actual host port. For Docker, Caddy runs on the host and connects to the published port. You can bind it to localhost using `-p 127.0.0.1:3000:3000` instead of `-p 3000:3000` in the Docker command above; keep port `3000` closed to public access.
+
+   Validate and reload:
+
+   ```bash
+   sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+   sudo systemctl reload caddy
+   ```
+
+   Caddy automatically obtains and renews a trusted TLS certificate and redirects HTTP to HTTPS. See [Caddy's HTTPS guide](https://caddyserver.com/docs/quick-starts/https).
+
+5. **Set StreamGram's public URL.** Open `https://streamgram.example.com` and enter it in the setup wizard, or update **Settings** for an existing instance. Before first-run setup, you can also use `.env`:
+
+   ```dotenv
+   PUBLIC_URL=https://streamgram.example.com
+   ```
+
+   Saved Settings take precedence over environment defaults. Keep admin protection enabled and install the addon using the HTTPS link shown in the dashboard.
+
+### Alternative: Tailscale Funnel
+
+[Tailscale Funnel](https://tailscale.com/docs/features/tailscale-funnel) provides a public domain and automatic HTTPS without buying a domain or configuring port forwarding. Its bandwidth limits can affect video streaming speed, so prefer the Caddy setup above when your server is directly reachable.
+
+With StreamGram running, install Tailscale on the **Linux host** and forward the app's port:
+
+```bash
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+# Sign in using the printed URL, then enable Funnel:
+sudo tailscale funnel --bg 3000
+sudo tailscale funnel status
+```
+
+Follow any Funnel approval link and replace `3000` if you use a different host port. For Docker, use the published host port. `--bg` keeps Funnel running after the terminal closes.
+
+Copy the HTTPS URL printed by Funnel into the setup wizard's public URL field (or **Settings** for an existing instance). Alternatively, set it in `.env` before first-run setup:
+
+```dotenv
+PUBLIC_URL=https://streamgram.example-tailnet.ts.net
+```
+
+Open that URL to finish setup and install the addon. Keep admin protection enabled, since Funnel makes the app public. See the [Linux installation guide](https://tailscale.com/docs/install/linux) and [Funnel CLI reference](https://tailscale.com/docs/reference/tailscale-cli/funnel) for details.
 
 ---
 
@@ -182,11 +259,11 @@ See the complete [tag feature documentation](docs/TAG_FEATURE.md) for title-base
 
 ## Environment Variables
 
-All values below are optional when using the setup wizard. Saved values in `data/config.json` take precedence over environment defaults.
+All values below are optional when using the setup wizard. Saved values in `data/config.json` take precedence over environment defaults. If your deployment uses the old `STREAM_HOST` variable, rename it to `PUBLIC_URL`.
 
 | Variable             | Description                                                                                          |
 | -------------------- | ---------------------------------------------------------------------------------------------------- |
-| `PUBLIC_URL`         | Public base URL used to create addon and stream links. `STREAM_HOST` is supported as an alias.       |
+| `PUBLIC_URL`         | Public HTTPS base URL with a domain, used to create addon and stream links. For example, `https://yourdomain.com`. |
 | `TELEGRAM_API_ID`    | Telegram API ID from [my.telegram.org](https://my.telegram.org).                                     |
 | `TELEGRAM_API_HASH`  | Telegram API hash from [my.telegram.org](https://my.telegram.org).                                   |
 | `TMDB_BEARER_TOKEN`  | TMDB v4 Read Access Token.                                                                           |

@@ -19,7 +19,7 @@ Create a `.env` file or use the first-run web wizard. The wizard can collect all
 
 - `TELEGRAM_API_ID` & `TELEGRAM_API_HASH` - from https://my.telegram.org
 - `TMDB_BEARER_TOKEN` - TMDB v4 API bearer token
-- `PUBLIC_URL` or `STREAM_HOST` - Public HTTPS URL for streaming (e.g., `https://yourdomain.com`)
+- `PUBLIC_URL` - Public HTTPS URL for streaming (e.g., `https://yourdomain.com`)
 - `PREFERRED_LANGUAGE` - ISO 639-1 code (en, he, ru, ar)
 
 Management is protected by AdminGuard when admin protection is enabled. First-run initialization closes permanently after management is initialized. Personal APIs require explicit private account tokens.
@@ -104,7 +104,7 @@ const results = await this.telegramService.searchMedia(client, query, media);
 All config in [src/config/configuration.ts](src/config/configuration.ts) exported as typed object:
 
 ```typescript
-this.configService.get<string>("server.streamHost");
+this.configService.get<string>("server.publicUrl");
 this.configService.get<number>("cache.defaultTtl");
 ```
 

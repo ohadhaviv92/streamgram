@@ -54,7 +54,7 @@ export function mapSearchPayloadToMediaDetails(
 export function getStreamBaseUrl(): string {
   const host = config.server.host;
   const port = config.server.port;
-  const configured = config.server.streamHost;
+  const configured = config.server.publicUrl;
 
   if (configured) {
     return configured.replace(/\/$/, "");

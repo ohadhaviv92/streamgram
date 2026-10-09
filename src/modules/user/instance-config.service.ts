@@ -76,8 +76,7 @@ export class InstanceConfigService implements OnModuleInit {
       publicUrl: this.firstNonEmpty(
         persisted.publicUrl,
         process.env.PUBLIC_URL,
-        process.env.STREAM_HOST,
-        this.configService.get<string>("server.streamHost", ""),
+        this.configService.get<string>("server.publicUrl", ""),
         "",
       ),
       telegram: {
