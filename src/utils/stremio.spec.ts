@@ -69,6 +69,26 @@ jest.mock("../config/configuration", () => ({
 }));
 
 describe("Stremio Utilities", () => {
+  describe("stream label language", () => {
+    it.each([
+      ["he", "תרגום מובנה", "מדובב"],
+      ["en", "Built-in Subtitles", "Dubbed"],
+      ["ru", "Встроенные субтитры", "Дубляж"],
+      ["ar", "ترجمة مدمجة", "مدبلج"],
+      ["unknown", "Built-in Subtitles", "Dubbed"],
+    ])("uses resolved account language %s", (language, subtitles, dubbed) => {
+      const stream = formatStreamForStremio("instance", {
+        chatId: "123",
+        messageId: 456,
+        fileName: "Movie.1080p.mkv",
+        caption: "תרגום מובנה מדובב",
+        fileSize: 0,
+        mimeType: "video/x-matroska",
+      }, undefined, undefined, language);
+      expect(stream?.name).toBe(`StreamGram\n1080p\n${subtitles}\n${dubbed}`);
+    });
+  });
+
   describe("source channel display", () => {
     const video: MediaSearchResult = {
       chatId: "123",

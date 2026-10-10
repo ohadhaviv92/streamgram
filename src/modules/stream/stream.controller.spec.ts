@@ -2,6 +2,40 @@ import express from "express";
 import { AddressInfo } from "net";
 import { get, request, Server } from "http";
 import { StreamController } from "./stream.controller";
+import { Request } from "express";
+
+describe("Stremio result language", () => {
+  it.each([
+    ["movie", "tt1234567"],
+    ["movie", "tg_channel_123"],
+    ["series", "tg_folder_1:1:1"],
+  ])("uses the resolved account language for %s %s", async (type, id) => {
+    const videos = [{
+      chatId: "123", messageId: 456,
+      fileName: "Movie.1080p.mkv", caption: "תרגום מובנה מדובב",
+    }];
+    const handler = {
+      handleMovieRequest: jest.fn(async () => ({
+        imdb_id: id, title: "Movie", type: "movie", results: videos,
+      })),
+      getChannelVideos: jest.fn(async () => videos),
+      getFolderChannelVideos: jest.fn(async () => videos),
+    };
+    const controller: StreamController = Reflect.construct(StreamController, [
+      handler, {}, { get: () => undefined }, {}, {},
+      { getConfig: () => ({ publicUrl: "https://test.example.com" }) },
+    ]);
+    for (const [language, subtitles, dubbed] of [
+      ["he", "תרגום מובנה", "מדובב"],
+      ["en", "Built-in Subtitles", "Dubbed"],
+    ]) {
+      const req = { user: { token: "test", language } } as Request;
+      const result = await controller.getStream(req, type, id);
+      expect(result.streams[0].name).toBe(`StreamGram\n1080p\n${subtitles}\n${dubbed}`);
+      expect(result.streams[0].url).toBe("https://test.example.com/test/watch/123/456");
+    }
+  });
+});
 
 // Exercise real HTTP framing, stream completion, and IncomingMessage lifecycle.
 describe("Telegram video HTTP streaming", () => {

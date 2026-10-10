@@ -629,7 +629,7 @@ export class StreamController {
             episodeNum,
           );
 
-          return { streams: this.mapMessagesToStreams(messages, user.token) };
+          return { streams: this.mapMessagesToStreams(messages, user.token, user.language) };
         }
 
         // Handle tmdb:id:season:episode format (4 parts)
@@ -693,7 +693,7 @@ export class StreamController {
             channelId,
           );
 
-          return { streams: this.mapMessagesToStreams(messages, user.token) };
+          return { streams: this.mapMessagesToStreams(messages, user.token, user.language) };
         }
 
         if (type === "movie") {
@@ -734,6 +734,7 @@ export class StreamController {
             item,
             mediaDetails,
             this.getBaseUrl(user.token),
+            user.language,
           ),
         )
         .filter((stream): stream is NonNullable<typeof stream> =>
@@ -970,6 +971,7 @@ export class StreamController {
   private mapMessagesToStreams(
     messages: MediaSearchResult[],
     userToken: string,
+    userLanguage: string,
   ): any[] {
     return messages
       .slice(0, 50)
@@ -979,6 +981,7 @@ export class StreamController {
           item,
           undefined,
           this.getBaseUrl(userToken),
+          userLanguage,
         ),
       )
       .filter((stream) => Boolean(stream));

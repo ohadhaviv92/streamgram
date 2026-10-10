@@ -140,6 +140,7 @@ export function formatStreamForStremio(
     episodeInfo?: { season: number; episode: number } | null;
   },
   baseUrlOverride?: string,
+  userLanguage: string = config.language.preferredLanguage,
 ): StremioStream | null {
   if (!result.chatId || !result.messageId) {
     return null;
@@ -180,9 +181,9 @@ export function formatStreamForStremio(
     `${result.fileName ?? ""} ${result.caption ?? ""}`,
   );
 
-  const preferredLangKey = config.language
-    .preferredLanguage as keyof typeof config.language.languages;
-  const langConfig = config.language.languages[preferredLangKey];
+  const preferredLangKey = userLanguage as keyof typeof config.language.languages;
+  const langConfig =
+    config.language.languages[preferredLangKey] || config.language.languages.en;
 
   const metadataParts = ["StreamGram"];
   if (quality) metadataParts.push(quality);
