@@ -11,6 +11,7 @@ import {
   IsUrl,
   Matches,
   MaxLength,
+  Max,
   Min,
   Validate,
   ValidateNested,
@@ -26,6 +27,7 @@ import {
 } from "../../user/instance-profile";
 
 class ImportUserDto implements UserEntry {
+  @IsOptional() @IsInt() @Min(0) @Max(8640000000000000) createdAt?: number;
   @IsString() @MaxLength(80) @IsOptional() name?: string;
   @IsString() @Matches(/^\d+$/) @IsOptional() telegramId?: string;
   @IsString() phone: string;

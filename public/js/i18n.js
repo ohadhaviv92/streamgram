@@ -113,6 +113,8 @@ const he = {
   revoked: "בוטלה",
   Expires: "בתוקף עד",
   Created: "נוצרה",
+  "Created at": "תאריך יצירה",
+  Unknown: "לא ידוע",
   "Instance credentials": "פרטי המופע",
   "Public URL": "כתובת ציבורית",
   "Telegram API ID": "מזהה API של טלגרם",

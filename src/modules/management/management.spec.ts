@@ -40,6 +40,53 @@ beforeEach(() => {
 afterEach(() => rmSync(directory, { recursive: true, force: true }));
 
 describe("Persistence, passwords and invitations", () => {
+  it("records creation time through both account creation paths and preserves it on reconnect and restore", async () => {
+    const config = instance();
+    const clock = jest.spyOn(Date, "now").mockReturnValue(1700000000000);
+    try {
+      const phoneUser = await config.createOrUpdateUser("+11111", "session-a");
+      const authUser = config.completeAuthentication(
+        { kind: "admin", id: "admin" }, "+22222", "2", "session-b",
+      );
+      expect(phoneUser.createdAt).toBe(1700000000000);
+      expect(authUser.createdAt).toBe(1700000000000);
+      clock.mockReturnValue(1800000000000);
+      expect((await config.createOrUpdateUser("+11111", "updated-a")).createdAt)
+        .toBe(phoneUser.createdAt);
+      expect(config.completeAuthentication(
+        { kind: "user", id: authUser.token }, "+22222", "2", "updated-b",
+      ).createdAt).toBe(authUser.createdAt);
+      config.updatePersonal(authUser.token, { name: "Updated" });
+      await config.updateUserSelections(authUser.token, { selectedFolders: [1] });
+      const restarted = instance();
+      expect(restarted.getUserByToken(authUser.token)?.createdAt).toBe(authUser.createdAt);
+      await restarted.importRaw(JSON.parse(config.exportRaw()));
+      expect(instance().getUserByToken(authUser.token)?.createdAt).toBe(authUser.createdAt);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+  it("keeps unknown legacy creation dates unknown after reconnect and import", async () => {
+    const config = instance({ users: { legacytoken1: {
+      token: "legacytoken1", phone: "+11111", sessionString: "legacy",
+    } } });
+    expect((await config.createOrUpdateUser("+11111", "updated")).createdAt).toBeUndefined();
+    expect(config.completeAuthentication(
+      { kind: "admin", id: "admin" }, "+11111", "1", "updated",
+    ).createdAt).toBeUndefined();
+    await config.importRaw(JSON.parse(config.exportRaw()));
+    expect(instance().getUserByToken("legacytoken1")?.createdAt).toBeUndefined();
+  });
+  it.each([-1, 1.5, "2026-01-01", 8640000000000001])(
+    "rejects an invalid account creation timestamp: %j", async (createdAt) => {
+      const config = instance();
+      const original = config.exportRaw();
+      await expect(config.importRaw({ users: { validtoken12: {
+        token: "validtoken12", phone: "+11111", sessionString: "session", createdAt,
+      } } } as PersistedInstanceConfig)).rejects.toThrow();
+      expect(config.exportRaw()).toBe(original);
+    },
+  );
   it("does not reopen setup when a legacy users map is empty", () => {
     const config = instance({ users: {} });
     expect(config.isManagementInitialized()).toBe(true);
@@ -480,7 +527,8 @@ describe("HTTP management and personal access", () => {
     expect((await request(`/admin/accounts/${user.token}/name`, "PUT", { name: "Changed" }, personalHeaders)).status).toBe(401);
     expect((await request(`/admin/accounts/${user.token}/name`, "PUT", { name: "Changed" }, { cookie, origin: "https://evil.example" })).status).toBe(403);
     expect((await request(`/admin/accounts/${user.token}/name`, "PUT", { name: "Changed" }, { cookie })).status).toBe(200);
-    expect((await request("/admin/accounts", "GET", undefined, { cookie })).data[0].name).toBe("Changed");
+    expect((await request("/admin/accounts", "GET", undefined, { cookie })).data[0])
+      .toMatchObject({ name: "Changed", createdAt: user.createdAt });
     const path = `/admin/invitations/${invite.id}/record`;
     expect((await request(path, "DELETE", undefined, { cookie, origin: "https://evil.example" })).status).toBe(403);
     expect((await request(path, "DELETE", undefined, { cookie })).status).toBe(200);

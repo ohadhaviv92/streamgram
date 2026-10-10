@@ -4,6 +4,8 @@ export type SupportedLanguage = "en" | "he" | "ru" | "ar";
  * A single user's persisted entry inside the `users` map.
  */
 export interface UserEntry {
+  /** Unix timestamp in milliseconds; absent for accounts created before tracking. */
+  createdAt?: number;
   /** Optional display name (not used for auth). */
   name?: string;
   telegramId?: string;

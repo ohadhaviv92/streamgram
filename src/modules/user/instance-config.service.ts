@@ -178,7 +178,13 @@ export class InstanceConfigService implements OnModuleInit {
 
     // Create a new entry with a freshly generated token.
     const token = generateUserToken();
-    const entry: UserEntry = { phone, sessionString, token, name };
+    const entry: UserEntry = {
+      phone,
+      sessionString,
+      token,
+      name,
+      createdAt: Date.now(),
+    };
     users[token] = entry;
     this.persisted.users = users;
     this.writePersistedConfig();
@@ -368,6 +374,7 @@ export class InstanceConfigService implements OnModuleInit {
       ...existing,
       ...(!existing && invitation?.name ? { name: invitation.name } : {}),
       token: existing?.token ?? generateUserToken(),
+      createdAt: existing ? existing.createdAt : Date.now(),
       phone,
       telegramId,
       sessionString,

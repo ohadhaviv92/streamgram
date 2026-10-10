@@ -90,6 +90,7 @@ export class ManagementController {
       phoneLast4: u.phone.replace(/\D/g, "").slice(-4),
       connected: Boolean(u.sessionString),
       language: u.language ?? null,
+      createdAt: u.createdAt ?? null,
     }));
   }
 
