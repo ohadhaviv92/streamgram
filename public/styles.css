@@ -105,6 +105,11 @@ button:active,
   border-color: #aa6565;
   background: transparent;
 }
+.warning {
+  color: #f5d18c;
+  border-color: #f5d18c;
+  background: transparent;
+}
 .ghost {
   background: transparent;
   border-color: transparent;
@@ -490,6 +495,11 @@ main {
 .account-row button {
   position: relative;
   z-index: 1;
+}
+.account-row .icon-button {
+  width: 44px;
+  height: 44px;
+  padding: 10px;
 }
 .identity {
   display: flex;
