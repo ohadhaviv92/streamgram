@@ -190,6 +190,7 @@ const he = {
     "שמרו על הקישור פרטי. הוא מעניק גישה לחשבון שלכם.",
   "Account preferences": "העדפות חשבון",
   "Display name": "שם תצוגה",
+  "Display name (optional)": "שם תצוגה (אופציונלי)",
   "Search language": "שפת חיפוש",
   "Use instance default": "ברירת מחדל של המופע",
   "Channel and folder catalogs (optional)": "קטלוגי ערוצים ותיקיות (אופציונלי)",

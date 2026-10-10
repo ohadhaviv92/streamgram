@@ -170,7 +170,7 @@ function renderAccounts(accounts, config, refresh) {
 }
 function nameDialog(title, value, trigger, save) {
   const d = dialog(title,
-    `<form id="name-form"><div class="field"><label for="record-name">${t("Display name")}</label><input id="record-name" maxlength="80" value="${esc(value)}" autocomplete="off"></div><button class="primary">${t("Save changes")}</button></form>`, trigger);
+    `<form id="name-form"><div class="field"><label for="record-name">${t("Display name (optional)")}</label><input id="record-name" maxlength="80" value="${esc(value)}" autocomplete="off"></div><button class="primary">${t("Create invitation")}</button></form>`, trigger);
   $("#name-form", d).onsubmit = (event) => {
     event.preventDefault();
     run($("#name-form button", d), async () => {
