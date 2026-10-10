@@ -12,7 +12,7 @@ import {
   UnauthorizedException,
   UseGuards,
 } from "@nestjs/common";
-import { IsOptional, IsString, MaxLength, MinLength } from "class-validator";
+import { IsBoolean, IsOptional, IsString, MaxLength, MinLength } from "class-validator";
 import { Request, Response } from "express";
 import { InstanceConfigService } from "../user/instance-config.service";
 import { ManagementService } from "./management.service";
@@ -22,6 +22,10 @@ import { UpdateNameDto } from "../user/dto/update-settings.dto";
 
 class CreateInvitationDto {
   @IsOptional() @IsString() @MaxLength(80) name?: string;
+}
+
+class UpdateBlockDto {
+  @IsBoolean() blocked: boolean;
 }
 
 class LoginDto {
@@ -89,8 +93,17 @@ export class ManagementController {
       name: u.name ?? "",
       phoneLast4: u.phone.replace(/\D/g, "").slice(-4),
       connected: Boolean(u.sessionString),
+      createdAt: u.createdAt ?? null,
+      blocked: u.blocked === true,
       language: u.language ?? null,
     }));
+  }
+
+  @Put("accounts/:token/block")
+  @UseGuards(AdminGuard)
+  async setAccountBlocked(@Param("token") token: string, @Body() body: UpdateBlockDto) {
+    await this.auth.setUserBlocked(token, body.blocked);
+    return { success: true };
   }
 
   @Delete("accounts/:token")

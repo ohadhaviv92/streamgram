@@ -280,6 +280,10 @@ On first SQLite initialization, StreamGram imports an existing `config.json` in 
 
 The JSON and SQLite stores evolve independently. To return to JSON with your latest data, convert your SQLite backup to the existing StreamGram JSON configuration format before restoring it with `STORAGE_DRIVER=json`. SQLite database files can only be restored in SQLite mode. Standard restore preserves the target backend's admin credentials and clears invitations; automatic first-run migration preserves the full source state.
 
+SQLite upgrades existing databases automatically to schema version 2. The `users` table includes `created_at` (Unix milliseconds), `blocked` (0/1), `selected_folders` and `selected_channels` (JSON arrays of catalog IDs). Invitations also have a `created_at` column. New accounts record their creation time once; legacy accounts retain an empty date when the original creation time is unknown. Version 1 SQLite backups remain supported.
+
+Admins can block and unblock accounts from the Accounts page, or through `PUT /admin/accounts/:token/block` with `{ "blocked": true }` or `{ "blocked": false }`. Blocking disables personal APIs, addon access, and reauthentication; it disconnects the managed Telegram client and invalidates pending authentication for that account. Unblocking keeps its existing private token, Telegram session, creation date, and catalog selections. Block state and account creation dates are preserved in backups and work with both storage backends.
+
 Keep the persistence directory and backups private. Run one application process per store. Docker persists either backend in the existing `/app/data` volume; when overriding `DATA_DIR`, mount that directory instead. Local SQLite dependency installation may require Python, make, and a C++ compiler if a prebuilt native driver is unavailable; the Docker builder includes these tools.
 
 Admin password authentication blocks an IP for 15 minutes after five failures within 15 minutes. Login and `x-admin-password` requests share the counter; successful password verification resets it. Existing browser sessions remain usable. Counters are held in memory and reset on restart.

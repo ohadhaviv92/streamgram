@@ -135,7 +135,7 @@ function renderAccounts(accounts, config, refresh) {
   $("#account-list").innerHTML = accounts
     .map(
       (a, i) =>
-        `<div class="row account-row"><div class="identity"><div class="avatar" aria-hidden="true">${esc((a.name || t("Account")).slice(0, 1).toUpperCase())}</div><div><h3><a class="account-link" href="/?action=settings&token=${encodeURIComponent(a.token)}" aria-label="${t("Open personal page")}: ${esc(a.name || t("Account"))}">${esc(a.name || t("Account"))}${icon("arrow")}</a></h3><p dir="ltr">•••• ${esc(a.phoneLast4)}</p></div></div><div class="actions">${badge(a.connected ? "Connected" : "Reconnect needed", a.connected ? "" : "warn")}<button class="ghost" data-copy="${i}">${icon("copy")}<span class="sr-only">${t("Copy manifest")}</span></button><button class="danger" data-delete="${i}">${t("Delete")}</button></div></div>`,
+        `<div class="row account-row"><div class="identity"><div class="avatar" aria-hidden="true">${esc((a.name || t("Account")).slice(0, 1).toUpperCase())}</div><div><h3><a class="account-link" href="/?action=settings&token=${encodeURIComponent(a.token)}" aria-label="${t("Open personal page")}: ${esc(a.name || t("Account"))}">${esc(a.name || t("Account"))}${icon("arrow")}</a></h3><p dir="ltr">•••• ${esc(a.phoneLast4)}</p>${a.createdAt !== null ? `<p class="hint">${t("Created")} ${new Date(a.createdAt).toLocaleDateString(language)}</p>` : ""}</div></div><div class="actions">${badge(a.blocked ? "Blocked" : a.connected ? "Connected" : "Reconnect needed", a.blocked || !a.connected ? "warn" : "")}<button class="${a.blocked ? "" : "danger"}" data-block="${i}">${t(a.blocked ? "Unblock" : "Block")}</button><button class="ghost" data-copy="${i}">${icon("copy")}<span class="sr-only">${t("Copy manifest")}</span></button><button class="danger" data-delete="${i}">${t("Delete")}</button></div></div>`,
     )
     .join("");
   document
@@ -148,6 +148,15 @@ function renderAccounts(accounts, config, refresh) {
             "Manifest copy to clipboard",
           )),
     );
+  document.querySelectorAll("[data-block]").forEach((b) => {
+    b.onclick = () => run(b, async () => {
+      const account = accounts[Number(b.dataset.block)];
+      await api(`/admin/accounts/${encodeURIComponent(account.token)}/block`, {
+        method: "PUT", body: { blocked: !account.blocked },
+      });
+      await refresh();
+    });
+  });
   document.querySelectorAll("[data-delete]").forEach(
     (b) =>
       (b.onclick = async () => {

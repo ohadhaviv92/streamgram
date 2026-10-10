@@ -10,10 +10,12 @@ import {
   IsString,
   IsUrl,
   Matches,
+  Max,
   MaxLength,
   Min,
   Validate,
   ValidateNested,
+  ValidateIf,
   ValidationArguments,
   ValidatorConstraint,
   ValidatorConstraintInterface,
@@ -26,6 +28,8 @@ import {
 } from "../../user/instance-profile";
 
 class ImportUserDto implements UserEntry {
+  @IsInt() @Min(0) @Max(Number.MAX_SAFE_INTEGER) @ValidateIf((_object, value) => value !== undefined) createdAt?: number;
+  @IsBoolean() @ValidateIf((_object, value) => value !== undefined) blocked?: boolean;
   @IsString() @MaxLength(80) @IsOptional() name?: string;
   @IsString() @Matches(/^\d+$/) @IsOptional() telegramId?: string;
   @IsString() phone: string;

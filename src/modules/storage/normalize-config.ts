@@ -17,6 +17,16 @@ export function normalizeConfig(value: unknown): PersistedInstanceConfig {
       if (!user || typeof user !== "object" || user.token !== token ||
           typeof user.phone !== "string" || typeof user.sessionString !== "string")
         throw new Error("Invalid persisted account record");
+      if (user.createdAt !== undefined && (!Number.isSafeInteger(user.createdAt) || user.createdAt < 0))
+        throw new Error("Invalid persisted account creation timestamp");
+      if (user.blocked !== undefined && typeof user.blocked !== "boolean")
+        throw new Error("Invalid persisted account block state");
+      if (user.selectedFolders !== undefined && (!Array.isArray(user.selectedFolders) ||
+          user.selectedFolders.some(id => !Number.isSafeInteger(id))))
+        throw new Error("Invalid persisted catalog folder IDs");
+      if (user.selectedChannels !== undefined && (!Array.isArray(user.selectedChannels) ||
+          user.selectedChannels.some(id => typeof id !== "string")))
+        throw new Error("Invalid persisted catalog channel IDs");
     }
   }
   if (next.invitations && new Set(next.invitations.map(i => i.id)).size !== next.invitations.length)

@@ -179,6 +179,30 @@ describe("Persistence, passwords and invitations", () => {
       sessionString: "new",
     });
   });
+  it("records account creation once and preserves it during reconnects", () => {
+    const c = instance();
+    const first = c.completeAuthentication({ kind: "admin", id: "admin" }, "+111", "1", "session");
+    expect(first.createdAt).toEqual(expect.any(Number));
+    const reconnected = c.completeAuthentication({ kind: "user", id: first.token }, "+111", "1", "replacement");
+    expect(reconnected.createdAt).toBe(first.createdAt);
+    expect(instance().getUserByToken(first.token)?.createdAt).toBe(first.createdAt);
+  });
+  it("blocks account access and reauthentication without deleting sessions or catalogs", async () => {
+    const c = instance();
+    const account = c.completeAuthentication({ kind: "admin", id: "admin" }, "+111", "1", "session");
+    await c.updateUserSelections(account.token, { selectedFolders: [1], selectedChannels: ["-100123"] });
+    c.setUserBlocked(account.token, true);
+    expect(() => c.getProfile(account.token)).toThrow("blocked");
+    expect(() => c.completeAuthentication({ kind: "admin", id: "admin" }, "+111", "1", "new")).toThrow("blocked");
+    expect(() => c.completeAuthentication({ kind: "user", id: account.token }, "+111", "1", "new")).toThrow("blocked");
+    const restarted = instance();
+    expect(() => restarted.getProfile(account.token)).toThrow("blocked");
+    restarted.setUserBlocked(account.token, false);
+    expect(restarted.getProfile(account.token).session_string).toBe("session");
+    expect(restarted.getUserByToken(account.token)).toMatchObject({
+      createdAt: account.createdAt, blocked: false, selectedFolders: [1], selectedChannels: ["-100123"],
+    });
+  });
   it("stores only invite hashes and survives restart", () => {
     const c = instance();
     const invite = c.createInvitation();
@@ -323,6 +347,9 @@ describe("Persistence, passwords and invitations", () => {
         },
       },
     },
+    ...[{ blocked: null }, { blocked: "true" }, { createdAt: null }, { createdAt: -1 }, { createdAt: Number.MAX_SAFE_INTEGER + 1 }].map(patch => ({
+      users: { validtoken12: { token: "validtoken12", phone: "1", sessionString: "s", ...patch } },
+    })),
     { unexpected: true },
   ])(
     "rejects malformed backups without changing configuration",
@@ -784,6 +811,37 @@ describe("HTTP management and personal access", () => {
     expect(response.status).toBe(400);
     expect(config.exportRaw()).toBe(before);
     expect((await request("/admin/accounts", "GET", undefined, { cookie })).status).toBe(200);
+  });
+  it("lets only admins block/unblock accounts and denies blocked personal and addon access", async () => {
+    const account = config.completeAuthentication({ kind: "admin", id: "admin" }, "+111", "1", "session");
+    await config.updateUserSelections(account.token, { selectedFolders: [1], selectedChannels: ["2"] });
+    const path = `/admin/accounts/${account.token}/block`;
+    expect((await request(path, "PUT", { blocked: true })).status).toBe(401);
+    expect((await request(path, "PUT", { blocked: "true" }, { cookie })).status).toBe(400);
+    expect((await request(path, "PUT", { blocked: true }, { cookie, origin: "https://foreign.example" })).status).toBe(403);
+    expect((await request(path, "PUT", { blocked: true }, { cookie })).status).toBe(200);
+    expect(clients.removeClient).toHaveBeenCalledWith(account.token);
+    const accounts = await request("/admin/accounts", "GET", undefined, { cookie });
+    expect(accounts.data[0]).toMatchObject({ blocked: true, createdAt: account.createdAt });
+    expect((await request(`/${account.token}/manifest.json`)).status).toBe(403);
+    expect((await request(`/${account.token}/catalog/series/telegram_folders.json`)).status).toBe(403);
+    expect((await request("/settings", "GET", undefined, { authorization: `Bearer ${account.token}` })).status).toBe(403);
+    expect((await request("/auth/send-code", "POST", { phone: "+111" }, { authorization: `Bearer ${account.token}` })).status).toBe(403);
+    expect((await request(path, "PUT", { blocked: false }, { cookie })).status).toBe(200);
+    expect((await request(`/${account.token}/manifest.json`)).status).toBe(200);
+    expect(config.getUserByToken(account.token)).toMatchObject({ token: account.token, sessionString: "session", selectedFolders: [1], selectedChannels: ["2"] });
+  });
+  it("invalidates personal authentication attempts when an account is blocked and unblocked", async () => {
+    const account = config.completeAuthentication({ kind: "admin", id: "admin" }, "+111", "1", "session");
+    telegram.sendAuthCode.mockResolvedValue({ phoneCodeHash: "hash", tempSessionString: "pending", isCodeViaApp: true });
+    const headers = { authorization: `Bearer ${account.token}` };
+    const attempt = await request("/auth/send-code", "POST", { phone: "+111" }, headers);
+    expect(attempt.status).toBe(200);
+    expect((await request(`/admin/accounts/${account.token}/block`, "PUT", { blocked: true }, { cookie })).status).toBe(200);
+    expect((await request(`/admin/accounts/${account.token}/block`, "PUT", { blocked: false }, { cookie })).status).toBe(200);
+    const verified = await request("/auth/verify-code", "POST", { phone: "+111", code: "12345", attemptId: attempt.data.attemptId }, headers);
+    expect(verified.status).toBe(400);
+    expect(config.getUserByToken(account.token)?.sessionString).toBe("session");
   });
   it("restoring a backup revokes browser sessions", async () => {
     expect(

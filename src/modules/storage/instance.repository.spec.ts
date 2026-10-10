@@ -182,6 +182,69 @@ describe("SQLite database backups", () => {
   });
 });
 
+describe("SQLite account column migration", () => {
+  let directory: string;
+  let repository: InstanceRepository | undefined;
+  beforeEach(() => { directory = fs.mkdtempSync(join(tmpdir(), "streamgram-user-schema-")); });
+  afterEach(() => {
+    repository?.close();
+    repository = undefined;
+    fs.rmSync(directory, { recursive: true, force: true });
+  });
+  function legacyDatabase(account: unknown = user) {
+    const db = new Database(join(directory, "config.sqlite"));
+    db.exec(`
+      CREATE TABLE settings (id INTEGER PRIMARY KEY, payload TEXT NOT NULL);
+      CREATE TABLE users (token TEXT PRIMARY KEY, phone TEXT NOT NULL, normalized_phone TEXT NOT NULL, telegram_id TEXT, payload TEXT NOT NULL);
+      CREATE TABLE invitations (id TEXT PRIMARY KEY, secret_hash TEXT NOT NULL, payload TEXT NOT NULL);
+      CREATE TABLE storage_metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      INSERT INTO settings VALUES (1, '{}');
+      INSERT INTO storage_metadata VALUES ('initialized', 'true');
+      PRAGMA user_version = 1;
+    `);
+    db.prepare("INSERT INTO users VALUES (?, ?, ?, ?, ?)").run(user.token, user.phone, "111", user.telegramId, JSON.stringify(account));
+    db.prepare("INSERT INTO invitations VALUES (?, ?, ?)").run(invitation.id, invitation.secretHash, JSON.stringify(invitation));
+    return db;
+  }
+  it("backfills queryable columns and preserves unknown creation dates on a version 1 database", () => {
+    const account = { ...user, blocked: true, selectedFolders: [1, 2], selectedChannels: ["-100123"] };
+    const db = legacyDatabase(account);
+    const v1Backup = db.serialize();
+    db.close();
+    repository = createInstanceRepository(new ConfigService({ storage: { driver: "sqlite", dataDir: directory } }));
+    expect(repository.getUser(user.token)).toEqual(account);
+    const inspection = new Database(join(directory, "config.sqlite"), { readonly: true });
+    expect(inspection.pragma("user_version", { simple: true })).toBe(2);
+    expect(inspection.prepare("SELECT created_at, blocked, selected_folders, selected_channels FROM users").get()).toEqual({
+      created_at: null, blocked: 1, selected_folders: "[1,2]", selected_channels: '["-100123"]',
+    });
+    expect(inspection.prepare("SELECT created_at FROM invitations").get()).toEqual({ created_at: invitation.createdAt });
+    inspection.close();
+    expect(repository.readDatabaseBackup(v1Backup).users?.[user.token]).toEqual(account);
+  });
+  it("writes and reads creation dates, block state and catalogs through their SQL columns", () => {
+    repository = createInstanceRepository(new ConfigService({ storage: { driver: "sqlite", dataDir: directory } }));
+    repository.upsertUser({ ...user, createdAt: 1234, blocked: true, selectedFolders: [1] });
+    const db = new Database(join(directory, "config.sqlite"));
+    expect(db.prepare("SELECT created_at FROM users").get()).toEqual({ created_at: 1234 });
+    db.prepare("UPDATE users SET blocked = 0, selected_channels = ?, selected_folders = ?").run('["-100999"]', '[2]');
+    db.close();
+    expect(repository.getUser(user.token)).toMatchObject({ createdAt: 1234, blocked: false, selectedFolders: [2], selectedChannels: ["-100999"] });
+    expect(repository.readDatabaseBackup(repository.exportBackup().data).users?.[user.token]).toMatchObject({ createdAt: 1234, blocked: false, selectedFolders: [2], selectedChannels: ["-100999"] });
+  });
+  it("rolls back schema changes if legacy payload migration fails", () => {
+    const db = legacyDatabase();
+    db.prepare("UPDATE users SET payload = 'invalid JSON'").run();
+    db.close();
+    expect(() => createInstanceRepository(new ConfigService({ storage: { driver: "sqlite", dataDir: directory } }))).toThrow("Unable to initialize");
+    const inspection = new Database(join(directory, "config.sqlite"));
+    expect(inspection.pragma("user_version", { simple: true })).toBe(1);
+    const columns = inspection.pragma("table_info(users)") as { name: string }[];
+    expect(columns.map(column => column.name)).not.toContain("blocked");
+    inspection.close();
+  });
+});
+
 describe("Storage selection and SQLite migration", () => {
   let directory: string;
   const opened: InstanceRepository[] = [];

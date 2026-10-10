@@ -132,6 +132,7 @@ export class ManagementService {
       : request.query.token;
     if (typeof token !== "string" || !this.config.getUserByToken(token))
       throw new UnauthorizedException("Missing or invalid user token");
+    this.config.getProfile(token); // Also rejects suspended accounts.
     return token;
   }
 
@@ -162,6 +163,7 @@ export class ManagementService {
   validateOwner(owner: AuthOwner) {
     if (owner.kind === "user" && !this.config.getUserByToken(owner.id))
       throw new UnauthorizedException("Account was deleted");
+    if (owner.kind === "user") this.config.getProfile(owner.id);
     if (owner.kind === "admin") {
       if (owner.id.startsWith("legacy:")) {
         if (!owner.id.startsWith(`legacy:${this.config.securityRevision}:`))

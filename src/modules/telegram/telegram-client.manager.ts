@@ -111,8 +111,8 @@ export class TelegramClientManager implements OnApplicationShutdown {
     const session = sessionString || "";
     if (this.instanceConfig && !userToken.startsWith("auth:")) {
       const account = this.instanceConfig.getUserByToken(userToken);
-      if (!account || account.sessionString !== session) {
-        throw new Error("Telegram account was deleted or its session was replaced");
+      if (!account || account.blocked || account.sessionString !== session) {
+        throw new Error("Telegram account was deleted, blocked or its session was replaced");
       }
     }
 

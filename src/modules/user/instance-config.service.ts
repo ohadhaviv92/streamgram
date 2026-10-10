@@ -104,6 +104,8 @@ export class InstanceConfigService implements OnModuleInit {
       throw new UnauthorizedException("Missing or invalid user token");
     }
 
+    if (entry.blocked) throw new ForbiddenException("Account is blocked");
+
     const config = this.getConfig();
     return {
       id: 1,
@@ -145,8 +147,10 @@ export class InstanceConfigService implements OnModuleInit {
   ): Promise<UserEntry> {
     return this.repository.transaction(() => {
       const existing = this.repository.findUserByPhone(phone);
+      if (existing?.blocked) throw new ForbiddenException("Account is blocked");
       const entry: UserEntry = {
         ...existing, phone, sessionString,
+        ...(!existing ? { createdAt: Date.now() } : {}),
         token: existing?.token ?? generateUserToken(),
         ...(name !== undefined ? { name } : {}),
       };
@@ -166,6 +170,12 @@ export class InstanceConfigService implements OnModuleInit {
 
   deleteUser(token: string): void {
     this.repository.deleteUser(token);
+  }
+
+  setUserBlocked(token: string, blocked: boolean): void {
+    const entry = this.getUserByToken(token);
+    if (!entry) throw new NotFoundException("User not found");
+    this.repository.upsertUser({ ...entry, blocked });
   }
 
   isManagementInitialized(): boolean {
@@ -313,8 +323,10 @@ export class InstanceConfigService implements OnModuleInit {
         }
         existing = target;
       }
+      if (existing?.blocked) throw new ForbiddenException("Account is blocked");
       const entry = {
         ...existing,
+        ...(!existing ? { createdAt: Date.now() } : {}),
         ...(!existing && invitation?.name ? { name: invitation.name } : {}),
         token: existing?.token ?? generateUserToken(),
         phone,

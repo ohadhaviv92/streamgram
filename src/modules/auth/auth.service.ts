@@ -57,6 +57,19 @@ export class AuthService {
     await this.clients.removeClient(token);
   }
 
+  async setUserBlocked(token: string, blocked: boolean): Promise<void> {
+    this.config.setUserBlocked(token, blocked);
+    if (!blocked) return;
+    const user = this.config.getUserByToken(token);
+    if (!user) throw new UnauthorizedException("Invalid user token");
+    this.deletedIdentities.set(user.telegramId ?? `+${user.phone.replace(/\D/g, "")}`, ++this.sequence);
+    for (const [id, attempt] of this.attempts) {
+      if ((attempt.owner.kind === "user" && attempt.owner.id === token) || attempt.phone === user.phone)
+        this.attempts.delete(id);
+    }
+    await this.clients.removeClient(token);
+  }
+
   private newAttempt(owner: AuthOwner, data: Partial<Attempt>, ttl = 300_000) {
     for (const [id, a] of this.attempts)
       if (
@@ -255,7 +268,7 @@ export class AuthService {
           0) >= a.created
       )
         throw new ForbiddenException(
-          "Account was deleted during authentication. Start again.",
+          "Account access changed during authentication. Start again.",
         );
       const entry = this.config.completeAuthentication(
         owner,
