@@ -254,7 +254,6 @@ const he = {
   "Save & continue": "שמירה והמשך",
   Back: "חזרה",
   "Go to dashboard": "מעבר ללוח הבקרה",
-  "Add family member": "הוספת בן משפחה",
   "You’re invited": "הוזמנתם",
   "Connect your Telegram account to get your own private Stremio installation.":
     "חברו את חשבון הטלגרם שלכם כדי לקבל התקנת סטרימיו פרטית.",

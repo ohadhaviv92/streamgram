@@ -198,6 +198,44 @@ test('first-run search dropdown matches each dashboard language after initializa
   }
 });
 
+test('completed setup opens the admin dashboard without relying on hash routing', async () => {
+  const elements = new Map();
+  let onConnected;
+  let dashboardOpened = 0;
+  let dashboardUrl;
+  const context = vm.createContext({
+    language: 'en', t: text => text,
+    $: selector => {
+      if (!elements.has(selector)) elements.set(selector, { insertAdjacentHTML() {} });
+      return elements.get(selector);
+    },
+    api: async url => url === '/settings' ? { manifestUrl: 'https://example.test/private/manifest.json' } : {},
+    shell() {}, pageHead: () => '', protectionFields: () => '', bindProtection() {},
+    credentialFields: () => '', credentialValues: () => ({}), bindSearchLanguageExample() {},
+    button: (label, id) => `<button id="${id}">${label}</button>`,
+    run: async (_, work) => work(), checksCard: () => '', bindChecks() {},
+    connect: (_, callback) => { onConnected = callback; },
+    installCard: () => '<section>Install in Stremio</section>',
+    history: { replaceState: (_, __, url) => { dashboardUrl = url; } },
+    admin: async () => { dashboardOpened++; },
+  });
+  vm.runInContext(source('setup.js'), context);
+  await vm.runInContext('setup()', context);
+  elements.get('#security').onsubmit({ preventDefault() {} });
+  for (let i = 0; i < 12; i++) await Promise.resolve();
+  elements.get('#instance').onsubmit({ preventDefault() {} });
+  for (let i = 0; i < 12; i++) await Promise.resolve();
+  elements.get('#connect').onclick();
+  await onConnected('private-token');
+  const completion = elements.get('#main').innerHTML;
+  assert.match(completion, /Install in Stremio/);
+  assert.match(completion, /Go to dashboard/);
+  assert.doesNotMatch(completion, /Add family member|Open personal page/);
+  await elements.get('#go-dashboard').onclick();
+  assert.equal(dashboardUrl, '/#overview');
+  assert.equal(dashboardOpened, 1);
+});
+
 function navigationHarness() {
   let context;
   function element() {
