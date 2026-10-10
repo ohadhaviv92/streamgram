@@ -345,6 +345,7 @@ export class InstanceConfigService implements OnModuleInit {
     phone: string,
     telegramId: string,
     sessionString: string,
+    telegramName?: string,
   ): UserEntry {
     const invitation = owner.kind === "invitation"
       ? this.requireInvitation(owner.id)
@@ -370,9 +371,12 @@ export class InstanceConfigService implements OnModuleInit {
       }
       existing = target;
     }
+    const name = existing?.name?.trim() ||
+      (!existing ? invitation?.name?.trim() : undefined) ||
+      telegramName?.trim().slice(0, 80);
     const entry = {
       ...existing,
-      ...(!existing && invitation?.name ? { name: invitation.name } : {}),
+      ...(name ? { name } : {}),
       token: existing?.token ?? generateUserToken(),
       createdAt: existing ? existing.createdAt : Date.now(),
       phone,

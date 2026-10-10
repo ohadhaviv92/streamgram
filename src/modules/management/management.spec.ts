@@ -40,6 +40,23 @@ beforeEach(() => {
 afterEach(() => rmSync(directory, { recursive: true, force: true }));
 
 describe("Persistence, passwords and invitations", () => {
+  it("fills unnamed accounts from Telegram and preserves custom and invitation names", () => {
+    const config = instance();
+    const owner: AuthOwner = { kind: "admin", id: "admin" };
+    const user = config.completeAuthentication(owner, "+11111", "1", "session", "  Telegram Name  ");
+    expect(user.name).toBe("Telegram Name");
+    expect(instance().getUserByToken(user.token)?.name).toBe("Telegram Name");
+    config.updatePersonal(user.token, { name: "Custom name" });
+    expect(config.completeAuthentication(owner, "+11111", "1", "new-session", "New Telegram Name").name)
+      .toBe("Custom name");
+    config.updatePersonal(user.token, { name: "" });
+    expect(config.completeAuthentication(owner, "+11111", "1", "new-session", "New Telegram Name").name)
+      .toBe("New Telegram Name");
+    const invite = config.createInvitation("Invitation name");
+    expect(config.completeAuthentication({ kind: "invitation", id: invite.id }, "+22222", "2", "session", "Telegram Name").name)
+      .toBe("Invitation name");
+    expect(config.completeAuthentication(owner, "+33333", "3", "session").name).toBeUndefined();
+  });
   it("records creation time through both account creation paths and preserves it on reconnect and restore", async () => {
     const config = instance();
     const clock = jest.spyOn(Date, "now").mockReturnValue(1700000000000);
@@ -924,7 +941,7 @@ describe("HTTP management and personal access", () => {
     expect(config.validateInvitation(invite.secret)).toBeTruthy();
     telegram.verifyAuthCode.mockResolvedValue("session");
     clients.getOrInitializeClient.mockResolvedValue({
-      getMe: async () => ({ id: 1, phone: "11111" }),
+      getMe: async () => ({ id: 1, phone: "11111", firstName: "Telegram", lastName: "Name" }),
     });
     const done = await auth.verifyCode(
       "+11111",
@@ -934,6 +951,7 @@ describe("HTTP management and personal access", () => {
       start.attemptId,
     );
     expect(done.success).toBe(true);
+    expect(config.getUserByToken(done.user?.token ?? "")?.name).toBe("Telegram Name");
     expect(() => config.validateInvitation(invite.secret)).toThrow("used");
   });
   it("rechecks a revoked invitation after Telegram authentication", async () => {
@@ -978,11 +996,12 @@ describe("HTTP management and personal access", () => {
     );
     telegram.checkLoginToken.mockResolvedValue("session");
     clients.getOrInitializeClient.mockResolvedValue({
-      getMe: async () => ({ id: 1, phone: "11111" }),
+      getMe: async () => ({ id: 1, phone: "11111", username: "telegram_handle" }),
     });
     expect(
       (await auth.checkQrStatus(qr.qrToken, owner, "password")).status,
     ).toBe("authorized");
+    expect(Object.values(config.getUsers())[0].name).toBe("telegram_handle");
     expect(telegram.checkLoginToken).toHaveBeenLastCalledWith(
       Buffer.from("qr"),
       "migrated-session",
