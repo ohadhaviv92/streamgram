@@ -3,10 +3,12 @@ import Database from "better-sqlite3";
 import * as fs from "fs";
 import { join } from "path";
 import { PersistedInstanceConfig, UserEntry, InvitationRecord } from "../user/instance-profile";
-import { InstanceRepository, InstanceSettings } from "./instance.repository";
+import { InstanceRepository, InstanceSettings, InstanceBackup } from "./instance.repository";
+import { normalizeConfig } from "./normalize-config";
 import { readJsonConfig } from "./json-instance.repository";
 
 export class SqliteInstanceRepository extends InstanceRepository {
+  readonly backupFormat = "sqlite" as const;
   private readonly db: Database.Database;
 
   constructor(dataDir: string) {
@@ -45,6 +47,55 @@ export class SqliteInstanceRepository extends InstanceRepository {
       if (error instanceof BadRequestException) throw error;
       throw new Error(`Unable to initialize ${databasePath}; check database integrity, schema version and filesystem access`);
     }
+  }
+
+  exportBackup(): InstanceBackup {
+    // SQLite serializes a consistent standalone database, including committed data.
+    return { extension: "sqlite", contentType: "application/vnd.sqlite3", data: this.db.serialize() };
+  }
+
+  readDatabaseBackup(data: Buffer): PersistedInstanceConfig {
+    let source: Database.Database | undefined;
+    try {
+      if (data.length < 100 || data.subarray(0, 16).toString("binary") !== "SQLite format 3\0")
+        throw new Error("Invalid SQLite header");
+      // Isolated, read-only database: never replace the live file or execute uploaded schema.
+      source = new Database(data, { readonly: true });
+      if (source.pragma("user_version", { simple: true }) !== 1 ||
+          source.pragma("quick_check", { simple: true }) !== "ok")
+        throw new Error("Invalid SQLite schema or integrity");
+      for (const name of ["settings", "users", "invitations", "storage_metadata"]) {
+        const table = source.prepare("SELECT type, sql FROM sqlite_master WHERE name = ?").get(name) as
+          { type: string; sql: string } | undefined;
+        if (!table || table.type !== "table" || !/^CREATE TABLE\s/i.test(table.sql))
+          throw new Error("Invalid backup table");
+      }
+      const initialized = source.prepare("SELECT value FROM storage_metadata WHERE key = 'initialized'").get() as
+        { value: string } | undefined;
+      if (initialized?.value !== "true") throw new Error("Uninitialized backup");
+      const settings = source.prepare("SELECT payload FROM settings WHERE id = 1").get() as { payload: string } | undefined;
+      if (!settings) throw new Error("Missing backup settings");
+      const users = source.prepare("SELECT token, payload FROM users ORDER BY rowid").all() as { token: string; payload: string }[];
+      const invitations = source.prepare("SELECT id, secret_hash, payload FROM invitations ORDER BY rowid").all() as
+        { id: string; secret_hash: string; payload: string }[];
+      return normalizeConfig({
+        ...JSON.parse(settings.payload),
+        users: Object.fromEntries(users.map(row => {
+          const user = JSON.parse(row.payload) as UserEntry;
+          if (user.token !== row.token) throw new Error("Invalid account identity");
+          return [row.token, user];
+        })),
+        invitations: invitations.map(row => {
+          const invitation = JSON.parse(row.payload) as InvitationRecord;
+          if (invitation.id !== row.id || invitation.secretHash !== row.secret_hash)
+            throw new Error("Invalid invitation identity");
+          return invitation;
+        }),
+      });
+    } catch {
+      // SQLite/JSON parser errors can expose backup contents; return a safe message.
+      throw new BadRequestException("Invalid or unsupported StreamGram SQLite backup");
+    } finally { source?.close(); }
   }
 
   private one<T>(sql: string, ...values: string[]): T | null {

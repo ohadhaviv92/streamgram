@@ -1,7 +1,8 @@
 import { ManagementModule } from "./modules/management/management.module";
-import { Module } from "@nestjs/common";
+import { Module, NestModule, MiddlewareConsumer, RequestMethod } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { ServeStaticModule } from "@nestjs/serve-static";
+import { raw } from "express";
 import { join } from "path";
 import { StreamModule } from "./modules/stream/stream.module";
 import { HealthModule } from "./modules/health/health.module";
@@ -36,4 +37,11 @@ import { DashboardController } from "./dashboard.controller";
     ManagementModule,
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(raw({
+      type: ["application/vnd.sqlite3", "application/x-sqlite3", "application/octet-stream"],
+      limit: "10mb",
+    })).forRoutes({ path: "setup/config/import", method: RequestMethod.POST });
+  }
+}

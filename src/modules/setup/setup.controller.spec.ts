@@ -16,6 +16,7 @@ describe("Public bootstrap privacy", () => {
     }),
     hasAdminPassword: jest.fn().mockReturnValue(true),
     isSetupComplete: jest.fn().mockReturnValue(true),
+    getBackupFormat: jest.fn().mockReturnValue("json"),
     getMissingFields: jest.fn().mockReturnValue([]),
   } as unknown as InstanceConfigService;
   const controller = new SetupController(

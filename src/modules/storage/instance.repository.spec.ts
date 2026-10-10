@@ -1,3 +1,4 @@
+import Database from "better-sqlite3";
 import { ConfigService } from "@nestjs/config";
 import fs from "fs";
 import { tmpdir } from "os";
@@ -96,11 +97,88 @@ describe.each(["json", "sqlite"])("InstanceRepository (%s)", driver => {
     expect(service.isManagementInitialized()).toBe(false);
   });
 
+  it("exports a standalone backup in the selected backend format", () => {
+    const repository = open();
+    repository.upsertUser(user);
+    const backup = repository.exportBackup();
+    expect(backup.extension).toBe(driver);
+    repository.deleteUser(user.token);
+    if (driver === "sqlite") {
+      expect(backup.contentType).toBe("application/vnd.sqlite3");
+      expect(backup.data.subarray(0, 16).toString()).toBe("SQLite format 3\0");
+      expect(repository.readDatabaseBackup(backup.data).users?.[user.token]).toEqual(user);
+    } else {
+      expect(backup.contentType).toBe("application/json");
+      expect(JSON.parse(backup.data.toString()).users[user.token]).toEqual(user);
+      expect(() => repository.readDatabaseBackup(backup.data)).toThrow("STORAGE_DRIVER=sqlite");
+    }
+  });
+
   it("keeps storage files and directories private", () => {
     open().upsertUser(user);
     const filename = driver === "sqlite" ? "config.sqlite" : "config.json";
     expect(fs.statSync(directory).mode & 0o777).toBe(0o700);
     expect(fs.statSync(join(directory, filename)).mode & 0o777).toBe(0o600);
+  });
+});
+
+describe("SQLite database backups", () => {
+  let directory: string;
+  let repository: InstanceRepository;
+  let service: InstanceConfigService;
+  beforeEach(() => {
+    directory = fs.mkdtempSync(join(tmpdir(), "streamgram-database-backup-"));
+    const config = new ConfigService({ storage: { driver: "sqlite", dataDir: directory } });
+    repository = createInstanceRepository(config);
+    service = new InstanceConfigService(config, repository);
+  });
+  afterEach(() => {
+    jest.restoreAllMocks();
+    repository.close();
+    fs.rmSync(directory, { recursive: true, force: true });
+  });
+  it("restores database data while preserving current admin security", async () => {
+    repository.replaceSettings({ adminPasswordHash: "foreign-hash", preferredLanguage: "ar" });
+    repository.upsertUser(user);
+    repository.upsertInvitation(invitation);
+    const backup = service.exportBackup().data;
+    repository.replaceSnapshot({});
+    await service.initialize({ adminPassword: "current-password" });
+    const hash = repository.getSettings().adminPasswordHash;
+    service.createInvitation();
+    const revision = service.securityRevision;
+    await service.importBackup(backup);
+    expect(repository.getSettings().adminPasswordHash).toBe(hash);
+    expect(service.verifyAdminPassword("current-password")).toBe(true);
+    expect(service.isManagementInitialized()).toBe(true);
+    expect(service.getUserByToken(user.token)).toEqual(user);
+    expect(service.getConfig().preferredLanguage).toBe("ar");
+    expect(service.getInvitations()).toEqual([]);
+    expect(service.securityRevision).toBe(revision + 1);
+  });
+  it("rejects corrupt or incompatible databases without changing the live store", async () => {
+    repository.upsertUser(user);
+    const before = service.exportRaw();
+    const revision = service.securityRevision;
+    await expect(service.importBackup(Buffer.from("invalid database"))).rejects.toThrow("SQLite backup");
+    const incompatible = new Database(service.exportBackup().data);
+    incompatible.pragma("user_version = 99");
+    await expect(service.importBackup(incompatible.serialize())).rejects.toThrow("SQLite backup");
+    incompatible.close();
+    const unrelated = new Database(":memory:");
+    unrelated.exec("CREATE TABLE unrelated (id INTEGER)");
+    await expect(service.importBackup(unrelated.serialize())).rejects.toThrow("SQLite backup");
+    unrelated.close();
+    expect(service.exportRaw()).toBe(before);
+    expect(service.securityRevision).toBe(revision);
+  });
+  it("rejects invalid account data even inside a valid database", async () => {
+    repository.upsertUser(user);
+    const invalid = new Database(service.exportBackup().data);
+    invalid.prepare("UPDATE users SET payload = ?").run(JSON.stringify({ ...user, token: "different-token" }));
+    await expect(service.importBackup(invalid.serialize())).rejects.toThrow("SQLite backup");
+    invalid.close();
+    expect(service.getUserByToken(user.token)).toEqual(user);
   });
 });
 

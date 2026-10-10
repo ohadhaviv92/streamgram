@@ -274,11 +274,11 @@ All values below are optional when using the setup wizard. Saved values in the s
 
 ### Persistence backends
 
-Set `STORAGE_DRIVER=sqlite` to use `data/config.sqlite` instead of `data/config.json`. Both backends support the same settings, Telegram accounts, invitations, and JSON export/import endpoints. The backend is selected only through environment configuration; unsupported values stop startup.
+Set `STORAGE_DRIVER=sqlite` to use `data/config.sqlite` instead of `data/config.json`. Both backends support the same settings, Telegram accounts, invitations, and backup endpoints. JSON mode downloads `.json` backups; SQLite mode downloads standalone `.sqlite` database files. The restore form accepts SQLite database backups in SQLite mode and existing JSON backups in either mode. SQLite uploads are limited to 10 MiB. The backend is selected only through environment configuration; unsupported values stop startup.
 
 On first SQLite initialization, StreamGram imports an existing `config.json` in `DATA_DIR` in one transaction, preserving account tokens, Telegram sessions, admin credentials, selections, and invitation states. The original JSON file is unchanged. Invalid data stops startup; fix the source and restart to retry. Once SQLite is initialized, later restarts never reimport JSON, even when all accounts have been deleted.
 
-The JSON and SQLite stores evolve independently. To return to JSON with your latest data, export a JSON backup while running SQLite, restart with `STORAGE_DRIVER=json`, and restore that backup. Standard restore preserves the target backend's admin credentials and clears invitations; automatic first-run migration preserves the full source state.
+The JSON and SQLite stores evolve independently. To return to JSON with your latest data, convert your SQLite backup to the existing StreamGram JSON configuration format before restoring it with `STORAGE_DRIVER=json`. SQLite database files can only be restored in SQLite mode. Standard restore preserves the target backend's admin credentials and clears invitations; automatic first-run migration preserves the full source state.
 
 Keep the persistence directory and backups private. Run one application process per store. Docker persists either backend in the existing `/app/data` volume; when overriding `DATA_DIR`, mount that directory instead. Local SQLite dependency installation may require Python, make, and a C++ compiler if a prebuilt native driver is unavailable; the Docker builder includes these tools.
 

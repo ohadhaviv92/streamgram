@@ -1,4 +1,4 @@
-import { ApiOperation, ApiResponse } from "@nestjs/swagger";
+import { ApiOperation, ApiResponse, ApiConsumes } from "@nestjs/swagger";
 import { ConfigurationChecksService } from "./configuration-checks.service";
 import { ConfigurationChecksResponseDto } from "./dto/configuration-checks-response.dto";
 import {
@@ -15,7 +15,6 @@ import {
 import { Request, Response } from "express";
 import { InstanceConfigService } from "../user/instance-config.service";
 import { SetupConfigDto } from "./dto/setup-config.dto";
-import { ImportConfigDto } from "./dto/import-config.dto";
 import { AdminGuard } from "../management/management.guards";
 import { ManagementService } from "../management/management.service";
 import { TelegramClientManager } from "../telegram/telegram-client.manager";
@@ -91,6 +90,7 @@ export class SetupController {
       adminPasswordConfigured: this.instanceConfig.hasAdminPassword(),
       setupComplete: this.instanceConfig.isSetupComplete(),
       missing: this.instanceConfig.getMissingFields(),
+      backupFormat: this.instanceConfig.getBackupFormat(),
     };
   }
 
@@ -125,22 +125,26 @@ export class SetupController {
   @Get("config/export")
   @UseGuards(AdminGuard)
   exportConfig(@Res() response: Response) {
+    const backup = this.instanceConfig.exportBackup();
+    response.setHeader("Cache-Control", "no-store");
     response.setHeader(
       "Content-Disposition",
-      `attachment; filename="streamgram-config-${Date.now()}.json"`,
+      `attachment; filename="streamgram-config-${Date.now()}.${backup.extension}"`,
     );
-    response.type("application/json").send(this.instanceConfig.exportRaw());
+    response.type(backup.contentType).send(backup.data);
   }
 
   @Post("config/import")
   @HttpCode(200)
   @UseGuards(AdminGuard)
+  @ApiConsumes("application/json", "application/vnd.sqlite3", "application/octet-stream")
+  @ApiOperation({ summary: "Restore a JSON or StreamGram SQLite backup" })
   async importConfig(
-    @Body() body: ImportConfigDto,
+    @Body() body: unknown,
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ) {
-    await this.instanceConfig.importRaw(body);
+    await this.instanceConfig.importBackup(body);
     await this.clients.disconnectAll();
     this.management.logout(request, response);
     return { success: true, message: "Backup restored. Sign in again." };

@@ -1,9 +1,26 @@
+import { BadRequestException } from "@nestjs/common";
 import { PersistedInstanceConfig, UserEntry, InvitationRecord } from "../user/instance-profile";
 
 export type InstanceSettings = Omit<PersistedInstanceConfig, "users" | "invitations">;
 
 /** Storage operations are synchronous; transaction callbacks must never await. */
+export interface InstanceBackup {
+  extension: "json" | "sqlite";
+  contentType: string;
+  data: Buffer;
+}
+
 export abstract class InstanceRepository {
+  readonly backupFormat: "json" | "sqlite" = "json";
+  exportBackup(): InstanceBackup {
+    return {
+      extension: "json", contentType: "application/json",
+      data: Buffer.from(`${JSON.stringify(this.snapshot(), null, 2)}\n`),
+    };
+  }
+  readDatabaseBackup(_data: Buffer): PersistedInstanceConfig {
+    throw new BadRequestException("SQLite backups require STORAGE_DRIVER=sqlite");
+  }
   abstract getSettings(): InstanceSettings;
   abstract replaceSettings(settings: InstanceSettings): void;
   abstract getUser(token: string): UserEntry | null;

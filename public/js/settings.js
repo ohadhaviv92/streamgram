@@ -44,7 +44,7 @@ export function bindProtection(hasPassword = false) {
 }
 export function renderSettings(data) {
   $("#main").innerHTML =
-    `<div class="page-head"><h1>${t("Settings")}</h1></div><section class="card"><div class="card-header"><h2>${t("Instance credentials")}</h2></div><form id="credentials" class="form-width">${credentialFields(data, { showTutorialLink: true })}<button class="primary" style="margin-top:24px">${t("Save changes")}</button></form></section><section class="card"><h2>${t("Admin protection")}</h2><form id="protection-form" class="form-width" style="margin-top:20px">${protectionFields(data)}<button class="primary">${t("Save changes")}</button></form></section><section class="card"><h2>${t("Backup & restore")}</h2><p>${t("Backups contain private Telegram sessions. Store them securely.")}</p><div class="actions"><a class="btn" href="/setup/config/export" download>${t("Download backup")}</a></div><form id="restore-form" class="form-width" style="margin-top:24px"><label for="backup-file">${t("Choose backup")}</label><input id="backup-file" type="file" accept="application/json,.json" required><button class="danger" style="margin-top:16px">${t("Restore backup")}</button></form></section><section class="card"><div class="split"><h2>${t("Cache")}</h2>${button("Clear cache", "clear-cache")}</div><p class="hint">${t("Removes cached search results, message details, folders, and channel video lists for all accounts.")}</p></section>`;
+    `<div class="page-head"><h1>${t("Settings")}</h1></div><section class="card"><div class="card-header"><h2>${t("Instance credentials")}</h2></div><form id="credentials" class="form-width">${credentialFields(data, { showTutorialLink: true })}<button class="primary" style="margin-top:24px">${t("Save changes")}</button></form></section><section class="card"><h2>${t("Admin protection")}</h2><form id="protection-form" class="form-width" style="margin-top:20px">${protectionFields(data)}<button class="primary">${t("Save changes")}</button></form></section><section class="card"><h2>${t("Backup & restore")}</h2><p>${t("Backups contain private Telegram sessions. Store them securely.")}</p><div class="actions"><a class="btn" href="/setup/config/export" download>${t("Download backup")}</a></div><form id="restore-form" class="form-width" style="margin-top:24px"><label for="backup-file">${t("Choose backup")}</label><input id="backup-file" type="file" accept="${data.backupFormat === "sqlite" ? ".sqlite,.db,application/vnd.sqlite3,application/json,.json" : "application/json,.json"}" required><button class="danger" style="margin-top:16px">${t("Restore backup")}</button></form></section><section class="card"><div class="split"><h2>${t("Cache")}</h2>${button("Clear cache", "clear-cache")}</div><p class="hint">${t("Removes cached search results, message details, folders, and channel video lists for all accounts.")}</p></section>`;
   $("#credentials").closest("section").insertAdjacentHTML("afterend", checksCard());
   const checks = bindChecks($("[data-configuration-checks]"));
   bindSearchLanguageExample("default-language");
@@ -110,7 +110,7 @@ export function renderSettings(data) {
     run($("#restore-form button"), async () => {
       await api("/setup/config/import", {
         method: "POST",
-        body: JSON.parse(await file.text()),
+        body: /\.(sqlite|db)$/i.test(file.name) ? file : JSON.parse(await file.text()),
       });
       location.assign("/");
     });

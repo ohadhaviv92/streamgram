@@ -161,11 +161,11 @@ export async function api(
     credentials: "same-origin",
     cache: "no-store",
     headers: {
-      "Content-Type": "application/json",
+      "Content-Type": body instanceof Blob ? "application/vnd.sqlite3" : "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(invite ? { "X-Invitation-Token": invite } : {}),
     },
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    ...(body !== undefined ? { body: body instanceof Blob ? body : JSON.stringify(body) } : {}),
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || (data.success === false && !data.passwordRequired)) {

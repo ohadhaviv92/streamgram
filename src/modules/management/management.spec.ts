@@ -753,6 +753,38 @@ describe("HTTP management and personal access", () => {
     });
     expect(config.isManagementInitialized()).toBe(true);
   });
+  it("downloads a backend-specific backup and restores it over HTTP", async () => {
+    const account = config.completeAuthentication({ kind: "admin", id: "admin" }, "+11111", "1", "backup-session");
+    const exported = await fetch(base + "/setup/config/export", { headers: { cookie } });
+    expect(exported.status).toBe(200);
+    expect(exported.headers.get("content-disposition")).toMatch(new RegExp(`\\.${driver}"$`));
+    expect(exported.headers.get("cache-control")).toBe("no-store");
+    const data = Buffer.from(await exported.arrayBuffer());
+    if (driver === "sqlite") expect(data.subarray(0, 16).toString()).toBe("SQLite format 3\0");
+    else expect(JSON.parse(data.toString()).users[account.token]).toBeDefined();
+    config.deleteUser(account.token);
+    const revision = config.securityRevision;
+    const imported = await fetch(base + "/setup/config/import", {
+      method: "POST", headers: { cookie, "content-type": driver === "sqlite" ? "application/vnd.sqlite3" : "application/json" },
+      body: new Uint8Array(data),
+    });
+    expect(imported.status).toBe(200);
+    expect(config.getProfile(account.token).session_string).toBe("backup-session");
+    expect(config.verifyAdminPassword("test-password")).toBe(true);
+    expect(config.securityRevision).toBe(revision + 1);
+    expect(clients.disconnectAll).toHaveBeenCalled();
+    expect((await request("/admin/accounts", "GET", undefined, { cookie })).status).toBe(401);
+  });
+  it("rejects corrupt binary uploads without invalidating the current session", async () => {
+    const before = config.exportRaw();
+    const response = await fetch(base + "/setup/config/import", {
+      method: "POST", headers: { cookie, "content-type": "application/vnd.sqlite3" },
+      body: new Uint8Array(Buffer.from("invalid database")),
+    });
+    expect(response.status).toBe(400);
+    expect(config.exportRaw()).toBe(before);
+    expect((await request("/admin/accounts", "GET", undefined, { cookie })).status).toBe(200);
+  });
   it("restoring a backup revokes browser sessions", async () => {
     expect(
       (await request("/setup/config/import", "POST", { users: {} }, { cookie }))

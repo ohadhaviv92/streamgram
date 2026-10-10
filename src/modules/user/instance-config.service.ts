@@ -18,7 +18,7 @@ import {
   AuthOwner,
   InvitationRecord,
 } from "./instance-profile";
-import { InstanceRepository } from "../storage/instance.repository";
+import { InstanceRepository, InstanceBackup } from "../storage/instance.repository";
 import { generateUserToken } from "../../common/utils/token";
 
 export interface SetupConfigPatch {
@@ -409,6 +409,17 @@ export class InstanceConfigService implements OnModuleInit {
       patch.adminProtection !== undefined
     )
       this.securityRevision++;
+  }
+
+  getBackupFormat(): "json" | "sqlite" { return this.repository.backupFormat; }
+
+  exportBackup(): InstanceBackup { return this.repository.exportBackup(); }
+
+  async importBackup(incoming: unknown): Promise<void> {
+    const config = Buffer.isBuffer(incoming)
+      ? this.repository.readDatabaseBackup(incoming)
+      : incoming;
+    await this.importRaw(config as PersistedInstanceConfig);
   }
 
   /** Returns the raw persisted JSON string for export. */
