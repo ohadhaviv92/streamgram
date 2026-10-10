@@ -22,6 +22,7 @@
     "lint": "eslint \"src/**/*.ts\"",
     "test": "jest",
     "test:watch": "jest --watch",
+    "update:telegram-names": "ts-node src/scripts/update-telegram-names.ts",
     "test:dashboard": "node --test tests/dashboard.test.cjs"
   },
   "dependencies": {

@@ -286,6 +286,8 @@ Admins can block and unblock accounts from the Accounts page, or through `PUT /a
 
 Keep the persistence directory and backups private. Run one application process per store. Docker persists either backend in the existing `/app/data` volume; when overriding `DATA_DIR`, mount that directory instead. Local SQLite dependency installation may require Python, make, and a C++ compiler if a prebuilt native driver is unavailable; the Docker builder includes these tools.
 
+To fill existing accounts' empty display names from Telegram, stop StreamGram and run `pnpm run update:telegram-names` from the project directory using the same `.env`, `STORAGE_DRIVER`, and `DATA_DIR` as the server. Add `--dry-run` to preview changes, or `--overwrite` to replace existing names as well. For example: `pnpm run update:telegram-names --dry-run --overwrite`. The script uses each account's saved Telegram session, skips blocked accounts and accounts without sessions, and preserves tokens, creation dates, and catalog selections. Names use Telegram first/last names, falling back to the username. Failed accounts are reported without exposing session credentials; other accounts continue, and any failures produce exit code 1. Restart StreamGram afterwards. For a compiled deployment without development dependencies, run `node dist/scripts/update-telegram-names.js` after building, with the same flags.
+
 Admin password authentication blocks an IP for 15 minutes after five failures within 15 minutes. Login and `x-admin-password` requests share the counter; successful password verification resets it. Existing browser sessions remain usable. Counters are held in memory and reset on restart.
 
 ---
