@@ -630,6 +630,8 @@ export class TelegramNestService {
    * Returns null if no split symbol is found or if the first part is empty
    */
   private extractTitleFirstPart(title: string): string | null {
+    const withoutSubtitle = this.prepareSearchTitle(title);
+    if (/\s+-/.test(title) && withoutSubtitle) return withoutSubtitle;
     for (const symbol of TITLE_SPLIT_SYMBOLS) {
       if (title.includes(symbol)) {
         const firstPart = title.split(symbol)[0].trim();
@@ -704,6 +706,8 @@ export class TelegramNestService {
     episodeInfo: EpisodeInfo,
     catalogId?: string,
   ): string[] {
+    baseTitle = this.prepareSearchTitle(baseTitle);
+    const englishTitle = this.prepareSearchTitle(media.title);
     const queries = new Set<string>();
     const languageKey = this.LANGUAGE_CONFIG
       .preferredLanguage as keyof typeof this.LANGUAGE_CONFIG.languages;
@@ -715,13 +719,14 @@ export class TelegramNestService {
 
     const add = (value?: string | null) => {
       if (value) {
-        queries.add(value.trim());
+        const cleaned = this.removeTitleColons(value);
+        if (cleaned) queries.add(cleaned);
       }
     };
 
     // Use catalog ID tag only if provided (no title-based tags)
     if (catalogId) {
-      add(`/tag ${catalogId}`);
+      queries.add(`/tag ${catalogId}`);
     }
 
     const seasonLong = langConfig?.seasonTerms.long[0];
@@ -730,22 +735,6 @@ export class TelegramNestService {
     const episodeShort = langConfig?.episodeTerms.short[0];
 
     add(baseTitle);
-
-    // Check if title contains any split symbols and add the first part as a search query
-    const firstPart = this.extractTitleFirstPart(baseTitle);
-    if (firstPart) {
-      add(firstPart);
-      if (seasonLong && episodeLong) {
-        const longFormat = `${firstPart} ${seasonLong} ${season} ${episodeLong} ${episode}`;
-        add(longFormat);
-      }
-      if (seasonShort && episodeShort) {
-        const shortFormat = `${firstPart} ${seasonShort}${season} ${episodeShort}${episode}`;
-        add(shortFormat);
-        const paddedFormat = `${firstPart} ${seasonShort}${seasonPadded} ${episodeShort}${episodePadded}`;
-        add(paddedFormat);
-      }
-    }
 
     if (seasonLong && episodeLong) {
       const longFormat = `${baseTitle} ${seasonLong} ${season} ${episodeLong} ${episode}`;
@@ -760,18 +749,12 @@ export class TelegramNestService {
     }
 
     // Release filenames often use the English title even for localized accounts.
-    // Search its subtitle-free name too so punctuation
-    // and omitted subtitles do not prevent Telegram from finding the file.
-    const englishTitle = media.title;
-    const englishFirstPart = this.extractTitleFirstPart(englishTitle);
-    for (const title of new Set([englishTitle, englishFirstPart].filter(Boolean))) {
-      add(`${title} s${seasonPadded}e${episodePadded}`);
-      add(`${title} s${season}e${episode}`);
-    }
+    add(`${englishTitle} s${seasonPadded}e${episodePadded}`);
+    add(`${englishTitle} s${season}e${episode}`);
 
     // Only add title-based tag query if no catalog ID was provided
     if (!catalogId) {
-      if (baseTitle === media.title) {
+      if (baseTitle === englishTitle) {
         // English title - use English format (s/e)
         add(`/tag ${baseTitle} s${seasonPadded}e${episodePadded}`);
       } else if (seasonShort && episodeShort) {
@@ -785,6 +768,49 @@ export class TelegramNestService {
     return Array.from(queries);
   }
 
+  private generateShortTitleEpisodeSearchQueries(
+    baseTitle: string,
+    media: MediaDetails,
+    { season, episode }: EpisodeInfo,
+    language: string,
+  ): string[] {
+    const queries = new Set<string>();
+    const config = this.LANGUAGE_CONFIG.languages[language];
+    const seasonPadded = String(season).padStart(2, "0");
+    const episodePadded = String(episode).padStart(2, "0");
+    const firstPart = this.extractTitleFirstPart(baseTitle);
+    if (firstPart) {
+      queries.add(firstPart);
+      const seasonLong = config?.seasonTerms.long[0];
+      const episodeLong = config?.episodeTerms.long[0];
+      const seasonShort = config?.seasonTerms.short[0];
+      const episodeShort = config?.episodeTerms.short[0];
+      if (seasonLong && episodeLong) {
+        queries.add(`${firstPart} ${seasonLong} ${season} ${episodeLong} ${episode}`);
+      }
+      if (seasonShort && episodeShort) {
+        queries.add(`${firstPart} ${seasonShort}${season} ${episodeShort}${episode}`);
+        queries.add(`${firstPart} ${seasonShort}${seasonPadded} ${episodeShort}${episodePadded}`);
+      }
+    }
+
+    const englishFirstPart = this.extractTitleFirstPart(media.title);
+    if (englishFirstPart) {
+      queries.add(`${englishFirstPart} s${seasonPadded}e${episodePadded}`);
+      queries.add(`${englishFirstPart} s${season}e${episode}`);
+    }
+    return [...new Set([...queries].map((query) => this.removeTitleColons(query)))];
+  }
+
+  private removeTitleColons(title: string): string {
+    return title.replace(/:/g, " ").replace(/\s+/g, " ").trim();
+  }
+
+  private prepareSearchTitle(title: string): string {
+    // A spaced hyphen introduces a subtitle; keep names like Spider-Man intact.
+    return this.removeTitleColons(title.split(/\s+-/)[0]);
+  }
+
   private generateSearchQueries(
     localizedTitle: string | null | undefined,
     media: MediaDetails,
@@ -792,8 +818,9 @@ export class TelegramNestService {
   ): string[] {
     const queries: string[] = [];
     const addUnique = (value?: string | null) => {
-      if (value && !queries.includes(value)) {
-        queries.push(value);
+      const cleaned = value ? this.removeTitleColons(value) : "";
+      if (cleaned && !queries.includes(cleaned)) {
+        queries.push(cleaned);
       }
     };
 
@@ -811,14 +838,15 @@ export class TelegramNestService {
 
     // Use catalog ID tag only if provided (no title-based tags)
     if (catalogId) {
-      addUnique(`/tag ${catalogId}`);
+      queries.push(`/tag ${catalogId}`);
     }
 
     const processTitle = (title?: string | null) => {
       if (!title) return;
       const parsed = this.parseComplexTitlePattern(title);
+      title = this.prepareSearchTitle(title);
       if (parsed) {
-        parsed.forEach(addUnique);
+        parsed.map((part) => this.prepareSearchTitle(part)).forEach(addUnique);
       } else {
         addUnique(title);
       }
@@ -858,7 +886,7 @@ export class TelegramNestService {
 
     // Only add title-based tag query if no catalog ID was provided
     if (!catalogId) {
-      const mainTitle = localizedTitle || media.title;
+      const mainTitle = this.prepareSearchTitle(localizedTitle || media.title);
       if (mainTitle && media.year) {
         addUnique(`/tag ${mainTitle} ${media.year}`);
       } else if (mainTitle) {
@@ -1362,34 +1390,29 @@ export class TelegramNestService {
         return true;
       }
 
-      return false;
+      const normalizedText = ` ${this.normalizeSearchText(fullText)} `;
+      return [baseTitle, normalizedTitle].some((title) => {
+        const prepared = this.normalizeSearchText(this.prepareSearchTitle(title));
+        return Boolean(prepared && normalizedText.includes(` ${prepared} `));
+      });
     }
 
     const fullText = `${result.fileName || ""} ${result.caption || ""}`
       .toLowerCase()
       .replace(/_/g, " ");
-    const baseTitleLower = baseTitle.toLowerCase();
-    const originalTitleLower = normalizedTitle;
-
-    // Check if the text contains the title (full or first part)
-    let hasTitle =
-      fullText.includes(baseTitleLower) ||
-      fullText.includes(originalTitleLower);
-
-    // Also check first part of titles if they contain split symbols
-    if (!hasTitle) {
-      const baseTitleFirstPart = this.extractTitleFirstPart(baseTitle);
-      if (baseTitleFirstPart && fullText.includes(baseTitleFirstPart)) {
-        hasTitle = true;
-      }
-    }
-
-    if (!hasTitle) {
-      const mediaTitleFirstPart = this.extractTitleFirstPart(normalizedTitle);
-      if (mediaTitleFirstPart && fullText.includes(mediaTitleFirstPart)) {
-        hasTitle = true;
-      }
-    }
+    // Treat filename separators like spaces when comparing series titles.
+    const normalizedText = ` ${this.normalizeSearchText(fullText)} `;
+    const titleMatches = (title: string | null): boolean => {
+      const normalized = title ? this.normalizeSearchText(title) : "";
+      return Boolean(normalized && normalizedText.includes(` ${normalized} `));
+    };
+    const hasTitle =
+      titleMatches(baseTitle) ||
+      titleMatches(normalizedTitle) ||
+      titleMatches(this.prepareSearchTitle(baseTitle)) ||
+      titleMatches(this.prepareSearchTitle(normalizedTitle)) ||
+      titleMatches(this.extractTitleFirstPart(baseTitle)) ||
+      titleMatches(this.extractTitleFirstPart(normalizedTitle));
 
     if (!hasTitle) {
       return false;
@@ -1474,7 +1497,7 @@ export class TelegramNestService {
     return seasonEpisodeRegexes.some((regex) => regex.test(fullText));
   }
 
-  private normalizeChannelTitle(title: string): string {
+  private normalizeSearchText(title: string): string {
     return title
       .normalize("NFKC")
       .replace(/[\u0591-\u05C7]/g, "")
@@ -1496,8 +1519,9 @@ export class TelegramNestService {
         .filter((title): title is string => Boolean(title))
         // Channels often use only the name before a subtitle separator.
         // Keep hyphenated names intact (e.g. "Breaking-Bad").
-        .flatMap((title) => [title, title.split(":")[0]])
-        .map((title) => this.normalizeChannelTitle(title))
+        .flatMap((title) => [title, this.prepareSearchTitle(title), this.extractTitleFirstPart(title)])
+        .filter((title): title is string => Boolean(title))
+        .map((title) => this.normalizeSearchText(title))
         .filter(Boolean),
     );
     const { season, episode } = media.episodeInfo;
@@ -1539,7 +1563,7 @@ export class TelegramNestService {
           continue;
         }
         const channelTitle = dialog.title || entity.title;
-        const normalized = ` ${this.normalizeChannelTitle(channelTitle)} `;
+        const normalized = ` ${this.normalizeSearchText(channelTitle)} `;
         if (![...titles].some((title) => normalized.includes(` ${title} `))) {
           continue;
         }
@@ -1658,26 +1682,25 @@ export class TelegramNestService {
         ? this.SEARCH_RESULTS.movie.totalResults
         : this.SEARCH_RESULTS.series.totalResults;
 
-    // Execute all search queries in parallel for better performance
-    const searchPromises = queries.map((searchQuery) =>
-      this.performGlobalSearch(client, searchQuery, media, catalogId).catch(
-        (error) => {
-          const errorMsg =
-            error instanceof Error ? error.message : String(error);
-          // Log only non-connection errors; connection errors are already handled
-          if (
-            !errorMsg.includes("TIMEOUT") &&
-            !errorMsg.includes("Connection") &&
-            !errorMsg.includes("ERR_")
-          ) {
-            logger.warn({ query: searchQuery, error }, "Search query failed");
-          }
-          return [];
-        },
+    // Run each search phase in parallel, handling failed queries independently.
+    const searchQueries = async (phaseQueries: string[]) => Promise.all(
+      phaseQueries.map((searchQuery) =>
+        this.performGlobalSearch(client, searchQuery, media, catalogId).catch(
+          (error) => {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            if (
+              !errorMsg.includes("TIMEOUT") &&
+              !errorMsg.includes("Connection") &&
+              !errorMsg.includes("ERR_")
+            ) {
+              logger.warn({ query: searchQuery, error }, "Search query failed");
+            }
+            return [];
+          },
+        ),
       ),
     );
-
-    const allQueryResults = await Promise.all(searchPromises);
+    const allQueryResults = await searchQueries(queries);
 
     // Flatten all results
     for (const queryResults of allQueryResults) {
@@ -1702,6 +1725,19 @@ export class TelegramNestService {
           partialMatches.push(result);
         }
       }
+    }
+
+    // Search shortened titles only after full-title queries have no exact match.
+    if (media.type === "series" && episodeInfo && exactMatches.length === 0) {
+      const shortQueries = this.generateShortTitleEpisodeSearchQueries(
+        baseTitle, media, episodeInfo, language,
+      ).filter((shortQuery) => !queries.includes(shortQuery));
+      const shortResults = this.removeDuplicates(
+        (await searchQueries(shortQueries)).flat(), media,
+      );
+      exactMatches.push(
+        ...shortResults.filter((result) => this.checkTitleMatch(result, media, baseTitle)),
+      );
     }
 
     // Optional dedicated-channel fallback: remove this block to disable it.

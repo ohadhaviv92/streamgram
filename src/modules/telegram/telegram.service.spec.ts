@@ -237,6 +237,48 @@ describe("TelegramNestService - Tag Feature", () => {
       });
     });
 
+    it("skips all shortened-title queries when full-title search finds an exact episode", async () => {
+      const details = {
+        ...media, title: "Example: A Journey", localizedTitle: "דוגמה: מסע",
+      };
+      (service as any).performGlobalSearch.mockResolvedValue([{
+        chatId: "123", messageId: 1, fileName: "Example: A Journey S01E02.mp4", fileSize: 1024,
+      }]);
+      const results = await service.searchMedia(client, details.localizedTitle, details, user);
+      expect(results).toHaveLength(1);
+      const queries = (service as any).performGlobalSearch.mock.calls.map((call: any[]) => call[1]);
+      expect(queries).toContain("Example A Journey s01e02");
+      expect(queries).not.toContain("Example s01e02");
+      expect(queries).not.toContain("דוגמה");
+      expect(queries).not.toContain("דוגמה עונה 1 פרק 2");
+      expect(client.getDialogs).not.toHaveBeenCalled();
+    });
+
+    it("waits for full-title filtering before trying shortened-title queries", async () => {
+      const details = {
+        ...media, title: "Example: A Journey", localizedTitle: "דוגמה: מסע",
+      };
+      let finishFullSearch: (results: unknown[]) => void = () => {};
+      const fullSearch = new Promise<unknown[]>((resolve) => { finishFullSearch = resolve; });
+      (service as any).performGlobalSearch.mockImplementation(async (_client: unknown, query: string) => {
+        if (query === "Example s01e02") return [{
+          chatId: "123", messageId: 2, fileName: "Example.S01E02.mp4", fileSize: 1024,
+        }];
+        if (query.startsWith("Example s") || query.startsWith("דוגמה ") || query === "דוגמה") return [];
+        return fullSearch;
+      });
+      const pending = service.searchMedia(client, details.localizedTitle, details, user);
+      await Promise.resolve();
+      expect((service as any).performGlobalSearch.mock.calls.some((call: any[]) => call[1] === "Example s01e02")).toBe(false);
+      finishFullSearch([{
+        chatId: "123", messageId: 1, fileName: "Example: A Journey S01E03.mp4", fileSize: 1024,
+      }]);
+      const results = await pending;
+      expect(results).toHaveLength(1);
+      expect(results[0].messageId).toBe(2);
+      expect(client.getDialogs).not.toHaveBeenCalled();
+    });
+
     it("searches English short names and accepts dotted release names for localized accounts", async () => {
       const details = {
         ...media, title: "Frieren: Beyond Journey's End",
@@ -256,6 +298,38 @@ describe("TelegramNestService - Tag Feature", () => {
       expect((service as any).performGlobalSearch).toHaveBeenCalledWith(
         client, "Frieren s01e01", details, undefined,
       );
+    });
+
+    it("keeps the dotted Tokyo Revengers release from the full-title search", async () => {
+      const details = {
+        ...media, imdbId: "tt13196080", title: "Tokyo Revengers",
+        localizedTitle: "הנוקמים מטוקיו", episodeInfo: { season: 1, episode: 1 },
+      };
+      const fileName = "Tokyo.Revengers.S01E01.Reborn.1080p.JIOHS.WEB-DL.Dual.Au.mkv";
+      (service as any).performGlobalSearch.mockImplementation(async (_client: unknown, query: string) => {
+        return query === "Tokyo Revengers s01e01" ? [{
+          chatId: "456", channelTitle: "גיבוי פירו 0.2", messageId: 13959,
+          fileName, fileSize: 1024,
+        }] : [];
+      });
+      const results = await service.searchMedia(client, details.localizedTitle, details, user);
+      expect(results).toHaveLength(1);
+      expect(results[0]).toMatchObject({ fileName, messageId: 13959 });
+      expect(client.getDialogs).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ["Tokyo.Revengers.S01E01.mkv", true],
+      ["Tokyo_Revengers_S01E01.mkv", true],
+      ["Tokyo-Revengers S01E01.mkv", true],
+      ["Tokyo.Revengers.S01E02.mkv", false],
+      ["Tokyo.Revengers.S01E11.mkv", false],
+      ["Tokyo.Revengers.S02E01.mkv", false],
+      ["Other.Show.S01E01.mkv", false],
+      ["Tokyo.RevengersExtra.S01E01.mkv", false],
+    ])("validates the title and exact episode in %s", (fileName, expected) => {
+      const details = { ...media, title: "Tokyo Revengers", episodeInfo: { season: 1, episode: 1 } };
+      expect((service as any).checkTitleMatch({ fileName }, details, "הנוקמים מטוקיו")).toBe(expected);
     });
 
     it("rejects the provided Frieren episode 2 release when episode 1 is requested", () => {
@@ -463,6 +537,78 @@ describe("TelegramNestService - Tag Feature", () => {
   });
 
   describe("Tag Query Generation", () => {
+    it.each(["movie", "series"])(
+      "searches the name before a hyphen subtitle for %s without losing episode/year suffixes",
+      (type) => {
+        const media = {
+          title: "Re:ZERO -Starting Life in Another World-",
+          type, year: 2016,
+          episodeInfo: type === "series" ? { season: 1, episode: 1 } : null,
+        };
+        const localized = "רי:זירו - מתחיל מאפס בעולם אחר-";
+        const queries: string[] = (service as any).generateSearchQueries(
+          localized, media, "tt5607616:1:1",
+        );
+        expect(queries).toContain("/tag tt5607616:1:1");
+        expect(queries).toContain("רי זירו");
+        expect(queries).toContain(type === "series" ? "Re ZERO s01e01" : "Re ZERO 2016");
+        expect(queries).toContain(type === "series" ? "רי זירו עונה 1 פרק 1" : "רי זירו 2016");
+        expect(queries.every((query) => !/Starting|מתחיל/.test(query))).toBe(true);
+
+        if (type === "series") {
+          const fallback: string[] = (service as any).generateShortTitleEpisodeSearchQueries(
+            localized, media, media.episodeInfo, "he",
+          );
+          expect(fallback).toContain("Re ZERO s01e01");
+          expect(fallback).not.toContain("Re s01e01");
+          expect(fallback).not.toContain("רי");
+          expect((service as any).checkTitleMatch(
+            { fileName: "Re.ZERO.S01E01.mp4" }, media, localized,
+          )).toBe(true);
+          expect((service as any).checkTitleMatch(
+            { fileName: "Re.Other.S01E01.mp4" }, media, localized,
+          )).toBe(false);
+          expect((service as any).checkTitleMatch(
+            { fileName: "Re.ZERO.S01E02.mp4" }, media, localized,
+          )).toBe(false);
+        }
+        expect((service as any).prepareSearchTitle("Spider-Man - No Way Home"))
+          .toBe("Spider-Man");
+      },
+    );
+
+    it.each(["movie", "series"])(
+      "removes title colons from %s searches while preserving catalog tags",
+      (type) => {
+        const media = {
+          title: "Star:Trek: Voyager",
+          originalTitle: "Star: Trek: Voyager",
+          type,
+          year: null,
+          episodeInfo: type === "series" ? { season: 1, episode: 2 } : null,
+        };
+        const queries: string[] = (service as any).generateSearchQueries(
+          "מסע: בין כוכבים",
+          media,
+          "tmdb:123",
+        );
+
+        expect(queries).toContain("/tag tmdb:123");
+        expect(queries).toContain("מסע בין כוכבים");
+        expect(queries.filter((query) => query !== "/tag tmdb:123"))
+          .toEqual(expect.arrayContaining([expect.stringContaining("Star Trek Voyager")]));
+        expect(queries.filter((query) => query !== "/tag tmdb:123")
+          .every((query) => !query.includes(":"))).toBe(true);
+
+        const titleQueries: string[] = (service as any).generateSearchQueries(
+          "מסע: בין כוכבים", media,
+        );
+        expect(titleQueries.some((query) => query.startsWith("/tag מסע בין כוכבים")))
+          .toBe(true);
+        expect(titleQueries.every((query) => !query.includes(":"))).toBe(true);
+      },
+    );
+
     it("should generate tag query for movie", () => {
       const media = {
         id: 0,
