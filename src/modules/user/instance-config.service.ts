@@ -303,6 +303,7 @@ export class InstanceConfigService implements OnModuleInit {
     phone: string,
     telegramId: string,
     sessionString: string,
+    telegramName?: string,
   ): UserEntry {
     return this.repository.transaction(() => {
       const invitation = owner.kind === "invitation"
@@ -324,10 +325,13 @@ export class InstanceConfigService implements OnModuleInit {
         existing = target;
       }
       if (existing?.blocked) throw new ForbiddenException("Account is blocked");
+      const name = existing?.name?.trim() ||
+        (!existing ? invitation?.name?.trim() : undefined) ||
+        telegramName?.trim().slice(0, 80);
       const entry = {
         ...existing,
         ...(!existing ? { createdAt: Date.now() } : {}),
-        ...(!existing && invitation?.name ? { name: invitation.name } : {}),
+        ...(name ? { name } : {}),
         token: existing?.token ?? generateUserToken(),
         phone,
         telegramId,

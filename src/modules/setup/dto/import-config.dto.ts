@@ -28,7 +28,7 @@ import {
 } from "../../user/instance-profile";
 
 class ImportUserDto implements UserEntry {
-  @IsInt() @Min(0) @Max(Number.MAX_SAFE_INTEGER) @ValidateIf((_object, value) => value !== undefined) createdAt?: number;
+  @IsInt() @Min(0) @Max(8640000000000000) @ValidateIf((_object, value) => value !== undefined) createdAt?: number;
   @IsBoolean() @ValidateIf((_object, value) => value !== undefined) blocked?: boolean;
   @IsString() @MaxLength(80) @IsOptional() name?: string;
   @IsString() @Matches(/^\d+$/) @IsOptional() telegramId?: string;

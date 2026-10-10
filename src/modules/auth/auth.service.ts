@@ -275,6 +275,8 @@ export class AuthService {
         phone,
         telegramId,
         session,
+        [me.firstName, me.lastName].filter(Boolean).join(" ").trim() ||
+          me.username,
       );
       this.attempts.delete(id);
       await this.clients.removeClient(entry.token);
