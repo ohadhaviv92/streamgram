@@ -1,6 +1,6 @@
 # StreamGram setup, management, and personal access
 
-StreamGram stores instance configuration and a token-keyed map of Telegram accounts in `data/config.json`. It needs no database. `TelegramClientManager` owns the shared pool of lazy clients, one per account token.
+StreamGram stores instance configuration and a token-keyed map of Telegram accounts in the selected persistence backend: `data/config.json` by default, or `data/config.sqlite` with `STORAGE_DRIVER=sqlite`. No external database is needed. `TelegramClientManager` owns the shared pool of lazy clients, one per account token.
 
 ## Browser setup and routing
 
@@ -77,7 +77,7 @@ The server obtains the verified Telegram identity, then rechecks the initiating 
 
 Backups support the users map, per-account language, names, Telegram identity, and folder/channel preferences. Invalid maps, mismatched tokens, duplicate identities, unknown keys, and invalid preferences are rejected. Restore preserves the current admin password and protection setting, keeps management initialized, invalidates invitations/browser sessions/pending authentication, and disconnects managed clients.
 
-Keep `data/` and backups private: they contain Telegram session strings and instance credentials. Never log session strings or include them in public/personal responses. Multiple server processes must not share one config file; invitation atomicity assumes the application's single-process deployment model.
+Keep `data/` and backups private: they contain Telegram session strings and instance credentials. Never log session strings or include them in public/personal responses. Multiple server processes must not share one persistence store; invitation atomicity assumes the application's single-process deployment model.
 
 ### International phone numbers and two-step verification
 

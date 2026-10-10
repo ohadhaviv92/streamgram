@@ -259,7 +259,7 @@ See the complete [tag feature documentation](docs/TAG_FEATURE.md) for title-base
 
 ## Environment Variables
 
-All values below are optional when using the setup wizard. Saved values in `data/config.json` take precedence over environment defaults. If your deployment uses the old `STREAM_HOST` variable, rename it to `PUBLIC_URL`.
+All values below are optional when using the setup wizard. Saved values in the selected persistence backend take precedence over environment defaults. If your deployment uses the old `STREAM_HOST` variable, rename it to `PUBLIC_URL`.
 
 | Variable             | Description                                                                                          |
 | -------------------- | ---------------------------------------------------------------------------------------------------- |
@@ -269,6 +269,18 @@ All values below are optional when using the setup wizard. Saved values in `data
 | `TMDB_BEARER_TOKEN`  | TMDB v4 Read Access Token.                                                                           |
 | `PREFERRED_LANGUAGE` | `en`, `he`, `ru`, or `ar`; defaults to `en`.                                                         |
 | `PORT`               | HTTP port; defaults to `3000`.                                                                       |
+| `STORAGE_DRIVER`     | `json` (default) or `sqlite`; restart to change the backend.                                          |
+| `DATA_DIR`           | Private persistence directory; defaults to `data` relative to the working directory.                 |
+
+### Persistence backends
+
+Set `STORAGE_DRIVER=sqlite` to use `data/config.sqlite` instead of `data/config.json`. Both backends support the same settings, Telegram accounts, invitations, and JSON export/import endpoints. The backend is selected only through environment configuration; unsupported values stop startup.
+
+On first SQLite initialization, StreamGram imports an existing `config.json` in `DATA_DIR` in one transaction, preserving account tokens, Telegram sessions, admin credentials, selections, and invitation states. The original JSON file is unchanged. Invalid data stops startup; fix the source and restart to retry. Once SQLite is initialized, later restarts never reimport JSON, even when all accounts have been deleted.
+
+The JSON and SQLite stores evolve independently. To return to JSON with your latest data, export a JSON backup while running SQLite, restart with `STORAGE_DRIVER=json`, and restore that backup. Standard restore preserves the target backend's admin credentials and clears invitations; automatic first-run migration preserves the full source state.
+
+Keep the persistence directory and backups private. Run one application process per store. Docker persists either backend in the existing `/app/data` volume; when overriding `DATA_DIR`, mount that directory instead. Local SQLite dependency installation may require Python, make, and a C++ compiler if a prebuilt native driver is unavailable; the Docker builder includes these tools.
 
 Admin password authentication blocks an IP for 15 minutes after five failures within 15 minutes. Login and `x-admin-password` requests share the counter; successful password verification resets it. Existing browser sessions remain usable. Counters are held in memory and reset on restart.
 

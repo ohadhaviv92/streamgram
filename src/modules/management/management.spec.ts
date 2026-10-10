@@ -1,8 +1,10 @@
+import { InstanceRepository } from "../storage/instance.repository";
+import { createInstanceRepository } from "../storage/storage.module";
 import { ConfigurationChecksService } from "../setup/configuration-checks.service";
 import { Test } from "@nestjs/testing";
 import { INestApplication } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "fs";
+import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { createHash } from "crypto";
@@ -19,6 +21,8 @@ import { ManagementService } from "./management.service";
 import { AuthService } from "../auth/auth.service";
 import { AuthOwner, PersistedInstanceConfig } from "../user/instance-profile";
 
+describe.each(["json", "sqlite"])("Management (%s)", (driver) => {
+const repositories: InstanceRepository[] = [];
 const settings = {
   publicUrl: "http://localhost",
   apiId: 12345,
@@ -29,15 +33,21 @@ const settings = {
 let directory: string;
 function instance(raw?: PersistedInstanceConfig) {
   if (raw) writeFileSync(join(directory, "config.json"), JSON.stringify(raw));
-  return new InstanceConfigService({
+  const configService = {
     get: (key: string, fallback: unknown) =>
-      key === "storage.dataDir" ? directory : fallback,
-  } as ConfigService);
+      key === "storage.dataDir" ? directory : key === "storage.driver" ? driver : fallback,
+  } as ConfigService;
+    const repository = createInstanceRepository(configService);
+    repositories.push(repository);
+    return new InstanceConfigService(configService, repository);
 }
 beforeEach(() => {
   directory = mkdtempSync(join(tmpdir(), "streamgram-test-"));
 });
-afterEach(() => rmSync(directory, { recursive: true, force: true }));
+afterEach(() => {
+  for (const repository of repositories.splice(0)) repository.close();
+  rmSync(directory, { recursive: true, force: true });
+});
 
 describe("Persistence, passwords and invitations", () => {
   it("does not reopen setup when a legacy users map is empty", () => {
@@ -244,8 +254,8 @@ describe("Persistence, passwords and invitations", () => {
     const invite = c.createInvitation();
     const spy = jest
       .spyOn(
-        c as unknown as { writePersistedConfig(): void },
-        "writePersistedConfig",
+        repositories[repositories.length - 1],
+        "upsertInvitation",
       )
       .mockImplementation(() => {
         throw new Error("disk full");
@@ -287,7 +297,7 @@ describe("Persistence, passwords and invitations", () => {
     expect(c.securityRevision).toBeGreaterThan(revision);
     expect(c.getProfile("restoretoken1").language).toBe("ar");
     expect(
-      JSON.parse(readFileSync(join(directory, "config.json"), "utf8")).users
+      JSON.parse(c.exportRaw()).users
         .restoretoken1.language,
     ).toBe("ar");
   });
@@ -389,6 +399,8 @@ describe("HTTP management and personal access", () => {
   beforeEach(async () => {
     config = instance();
     const module = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(InstanceRepository)
+      .useValue({ close: () => {} })
       .overrideProvider(InstanceConfigService)
       .useValue(config)
       .overrideProvider(TelegramNestService)
@@ -1069,4 +1081,6 @@ describe("HTTP management and personal access", () => {
       id: user.token,
     });
   });
+});
+
 });

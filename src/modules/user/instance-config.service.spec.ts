@@ -1,3 +1,5 @@
+import { InstanceRepository } from "../storage/instance.repository";
+import { createInstanceRepository } from "../storage/storage.module";
 import { ConfigService } from "@nestjs/config";
 import { createHash } from "crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
@@ -5,7 +7,8 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { InstanceConfigService } from "./instance-config.service";
 
-describe("Persisted invitation migration", () => {
+describe.each(["json", "sqlite"])("Persisted invitation migration (%s)", (driver) => {
+  const repositories: InstanceRepository[] = [];
   let directory: string;
   let configPath: string;
 
@@ -15,14 +18,18 @@ describe("Persisted invitation migration", () => {
   });
 
   afterEach(() => {
+    for (const repository of repositories.splice(0)) repository.close();
     rmSync(directory, { recursive: true, force: true });
   });
 
   function load() {
-    return new InstanceConfigService({
+    const configService = {
       get: (key: string, fallback: unknown) =>
-        key === "storage.dataDir" ? directory : fallback,
-    } as ConfigService);
+        key === "storage.dataDir" ? directory : key === "storage.driver" ? driver : fallback,
+    } as ConfigService;
+    const repository = createInstanceRepository(configService);
+    repositories.push(repository);
+    return new InstanceConfigService(configService, repository);
   }
 
   function save(invitations: unknown) {
@@ -90,7 +97,7 @@ describe("Persisted invitation migration", () => {
       for (const status of ["expired", "used", "revoked"]) {
         expect(() => config.validateInvitation(status)).toThrow(status);
       }
-      const persisted = JSON.parse(readFileSync(configPath, "utf8"));
+      const persisted = JSON.parse(config.exportRaw());
       expect(persisted).toEqual({
         ...original,
         invitations: records.map((record) => ({

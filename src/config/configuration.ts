@@ -1,4 +1,8 @@
 export default () => ({
+  storage: {
+    driver: process.env.STORAGE_DRIVER || "json",
+    dataDir: process.env.DATA_DIR || "data",
+  },
   telegram: {
     apiId: parseInt(process.env.TELEGRAM_API_ID || "0", 10),
     apiHash: process.env.TELEGRAM_API_HASH || "",
