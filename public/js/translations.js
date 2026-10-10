@@ -1,4 +1,8 @@
 export const ru = {
+  "Example: searching in English finds this title:": "Например, поиск на английском использует это название:",
+  "Example: searching in the selected language includes both titles:": "Например, поиск на выбранном языке использует оба названия:",
+  "Sets the default language for searching Telegram by movie and series titles. Accounts using the instance default inherit this search language.": "Задаёт язык по умолчанию для поиска в Telegram по названиям фильмов и сериалов. Аккаунты с настройкой по умолчанию наследуют этот язык поиска.",
+  "Sets the language for searching Telegram by movie and series titles for this account. Use instance default follows the server’s search language.": "Задаёт язык поиска в Telegram по названиям фильмов и сериалов для этого аккаунта. Настройка по умолчанию использует язык поиска сервера.",
   "Menu": "Меню",
   "Close menu": "Закрыть меню",
   "Connections need attention": "Соединения требуют внимания",
@@ -232,6 +236,10 @@ export const ru = {
   "Removes cached search results, message details, folders, and channel video lists for all accounts.": "Удаляет из кэша результаты поиска, данные сообщений, папки и списки видео каналов всех аккаунтов."
 };
 export const ar = {
+  "Example: searching in English finds this title:": "مثال: البحث بالإنجليزية يستخدم هذا العنوان:",
+  "Example: searching in the selected language includes both titles:": "مثال: البحث باللغة المختارة يشمل كلا العنوانين:",
+  "Sets the default language for searching Telegram by movie and series titles. Accounts using the instance default inherit this search language.": "تحدد اللغة الافتراضية للبحث في تيليجرام بأسماء الأفلام والمسلسلات. الحسابات التي تستخدم الإعداد الافتراضي تتبع لغة البحث هذه.",
+  "Sets the language for searching Telegram by movie and series titles for this account. Use instance default follows the server’s search language.": "تحدد لغة البحث في تيليجرام بأسماء الأفلام والمسلسلات لهذا الحساب. اختيار الإعداد الافتراضي يستخدم لغة البحث الخاصة بالخادم.",
   "Menu": "القائمة",
   "Close menu": "إغلاق القائمة",
   "Connections need attention": "الاتصالات تحتاج إلى مراجعة",

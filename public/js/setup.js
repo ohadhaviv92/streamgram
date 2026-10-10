@@ -1,3 +1,4 @@
+import { bindSearchLanguageExample } from "./search-language.js";
 import { checksCard, bindChecks } from "./checks.js";
 import { t, language } from "./i18n.js";
 import {
@@ -63,6 +64,7 @@ export async function setup() {
       1,
       `<h2>${t("Set up your instance")}</h2><p>${t("Existing environment settings are prefilled. Blank secret fields keep saved values.")}</p><form id="instance">${credentialFields(config)}<div class="actions" style="margin-top:24px">${button("Back", "back")}<button class="primary">${t("Save & continue")}</button></div></form>`,
     );
+    bindSearchLanguageExample("default-language");
     $("#back").onclick = secure;
     $("#instance").onsubmit = (e) => {
       e.preventDefault();

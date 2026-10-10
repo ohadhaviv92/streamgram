@@ -18,6 +18,30 @@ function locale(search = '', saved = null) {
   vm.runInContext(source('translations.js') + source('i18n.js') + '\napplyLanguage();', context);
   return { context, language: vm.runInContext('language', context) };
 }
+test('search example appears after selection and follows each language and server inheritance', () => {
+  const select = { value: 'he' };
+  const example = { hidden: true, innerHTML: '' };
+  const context = vm.createContext({
+    t: text => text, esc: text => text,
+    $: selector => selector.endsWith('-example') ? example : select,
+  });
+  vm.runInContext(source('search-language.js'), context);
+  vm.runInContext('bindSearchLanguageExample("personal-language", "ru")', context);
+  assert.equal(example.hidden, true);
+  for (const [language, expected] of [
+    ['he', 'ליל המתים החיים'], ['ru', 'Ночь живых мертвецов'],
+    ['ar', 'ليلة الموتى الأحياء'], ['en', 'Night of the Living Dead'],
+    ['', 'Ночь живых мертвецов'],
+  ]) {
+    select.value = language;
+    select.onchange();
+    assert.equal(example.hidden, false);
+    assert.ok(example.innerHTML.includes(expected));
+    assert.match(example.innerHTML, /Night of the Living Dead/);
+    assert.doesNotMatch(example.innerHTML, /public domain|ליל המתים החיים.*Ночь/);
+    if (language === 'en') assert.doesNotMatch(example.innerHTML, / \/ /);
+  }
+});
 test('all four URL languages override the saved preference and set text direction', () => {
   for (const language of ['en', 'he', 'ru', 'ar']) {
     const result = locale(`?token=private&lng=${language}`, 'he');
@@ -162,7 +186,7 @@ test('first-run search dropdown matches each dashboard language after initializa
         return elements.get(selector);
       },
       api: async url => url === '/setup/admin-status' ? { preferredLanguage: 'en' } : {},
-      shell() {}, pageHead: () => '', protectionFields: () => '', bindProtection() {},
+      bindSearchLanguageExample() {}, shell() {}, pageHead: () => '', protectionFields: () => '', bindProtection() {},
       credentialFields: config => { selected = config.preferredLanguage; return ''; },
       button: () => '', run: async (_, work) => work(),
     });
@@ -334,7 +358,7 @@ test('personal page hides account names and saves language without changing the 
     return elements.get(selector);
   };
   const context = vm.createContext({
-    shell() {}, t: text => text, $: element, esc: value => String(value ?? ""),
+    bindSearchLanguageExample() {}, shell() {}, t: text => text, $: element, esc: value => String(value ?? ""),
     badge: () => '', installCard: () => '', button: () => '', languageOptions: () => '',
     api: async (url, options) => { calls.push({ url, options }); return { name: 'Admin label' }; },
     run: async (_, work) => work(), toast() {},
@@ -356,7 +380,7 @@ test('signed-in admins edit the account name in the original preferences form', 
     return elements.get(selector);
   };
   const context = vm.createContext({
-    shell() {}, t: text => text, $: element, esc: value => String(value ?? ''),
+    bindSearchLanguageExample() {}, shell() {}, t: text => text, $: element, esc: value => String(value ?? ''),
     badge: () => '', installCard: () => '', button: () => '', languageOptions: () => '',
     api: async (url, options) => { calls.push({ url, options }); return { canEditName: true, name: 'Admin label' }; },
     run: (_, work) => { saving = work(); return saving; }, toast() {},

@@ -4,6 +4,7 @@ export class UserSettingsResponseDto {
   name?: string;
   personalLanguage: string | null;
   language: string;
+  instanceLanguage: string;
   tmdbToken: string | null;
   manifestUrl: string;
   telegramConnected: boolean;

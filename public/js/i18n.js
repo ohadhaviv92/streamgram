@@ -1,5 +1,9 @@
 import { ru, ar } from "./translations.js";
 const he = {
+  "Example: searching in English finds this title:": "לדוגמה: חיפוש באנגלית כולל את השם הזה:",
+  "Example: searching in the selected language includes both titles:": "לדוגמה: חיפוש בשפה שנבחרה כולל את שני השמות:",
+  "Sets the default language for searching Telegram by movie and series titles. Accounts using the instance default inherit this search language.": "זו שפת החיפוש בטלגרם לפי שמות סרטים וסדרות. משתמשים שבוחרים בברירת המחדל של השרת מחפשים בשפה זו.",
+  "Sets the language for searching Telegram by movie and series titles for this account. Use instance default follows the server’s search language.": "זו שפת החיפוש בטלגרם לפי שמות סרטים וסדרות עבור המשתמש הזה. בחירה בברירת המחדל משתמשת בשפת החיפוש של השרת.",
   "Menu": "תפריט",
   "Close menu": "סגירת התפריט",
   "English is always searched. Selecting another language adds searches in that language.": "החיפוש תמיד כולל אנגלית. בחירת שפה נוספת מוסיפה חיפושים בשפה זו.",

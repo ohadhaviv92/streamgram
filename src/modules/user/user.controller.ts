@@ -57,6 +57,7 @@ export class UserController {
         ? { name: this.instanceConfig.getUserByToken(profile.token)?.name ?? "" }
         : {}),
       language: profile.language,
+      instanceLanguage: this.instanceConfig.getConfig().preferredLanguage,
       personalLanguage:
         this.instanceConfig.getUserByToken(profile.token)?.language ?? null,
       tmdbToken: null,
