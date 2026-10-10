@@ -19,6 +19,7 @@ import {
   bindProtection,
 } from "./settings.js";
 import { connect } from "./auth.js";
+import { admin } from "./admin.js";
 export async function setup() {
   shell();
   let config = await api("/setup/bootstrap");
@@ -90,8 +91,13 @@ export async function setup() {
         frame(
           3,
           installCard(account.manifestUrl) +
-            `<div class="actions"><a class="btn primary" href="/#overview">${t("Go to dashboard")}</a><a class="btn" href="/#invitations">${t("Add family member")}</a><a class="btn ghost" href="/?action=settings&token=${encodeURIComponent(token)}">${t("Open personal page")}</a></div>`,
+            `<div class="actions">${button("Go to dashboard", "go-dashboard", "primary")}</div>`,
         );
+        $("#go-dashboard").onclick = () =>
+          run($("#go-dashboard"), async () => {
+            history.replaceState(null, "", "/#overview");
+            await admin();
+          });
         $("#copy-manifest").onclick = () =>
           copy(account.manifestUrl, "Manifest copy to clipboard");
       });
