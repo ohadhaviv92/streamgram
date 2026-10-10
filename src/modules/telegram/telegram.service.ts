@@ -759,9 +759,14 @@ export class TelegramNestService {
       add(paddedFormat);
     }
 
-    if (languageKey !== "en") {
-      const englishFormat = `${media.title} s${seasonPadded}e${episodePadded}`;
-      add(englishFormat);
+    // Release filenames often use the English title even for localized accounts.
+    // Search its subtitle-free name too so punctuation
+    // and omitted subtitles do not prevent Telegram from finding the file.
+    const englishTitle = media.title;
+    const englishFirstPart = this.extractTitleFirstPart(englishTitle);
+    for (const title of new Set([englishTitle, englishFirstPart].filter(Boolean))) {
+      add(`${title} s${seasonPadded}e${episodePadded}`);
+      add(`${title} s${season}e${episode}`);
     }
 
     // Only add title-based tag query if no catalog ID was provided
@@ -1334,7 +1339,7 @@ export class TelegramNestService {
 
     //for hebrew and similar languages, ignore nikud and other diacritics for matching purposes
     baseTitle = baseTitle.replace(/[\u0591-\u05C7]/g, "").toLowerCase();
-    media.title = media.title.replace(/[\u0591-\u05C7]/g, "").toLowerCase();
+    const normalizedTitle = media.title.replace(/[\u0591-\u05C7]/g, "").toLowerCase();
     if (!media.episodeInfo) {
       // For movies, just check if title is mentioned
       const fullText = `${result.fileName || ""} ${result.caption || ""}`
@@ -1342,7 +1347,7 @@ export class TelegramNestService {
         .replace(/_/g, " ");
 
       // Check full titles
-      if (fullText.includes(baseTitle) || fullText.includes(media.title)) {
+      if (fullText.includes(baseTitle) || fullText.includes(normalizedTitle)) {
         return true;
       }
 
@@ -1352,7 +1357,7 @@ export class TelegramNestService {
         return true;
       }
 
-      const mediaTitleFirstPart = this.extractTitleFirstPart(media.title);
+      const mediaTitleFirstPart = this.extractTitleFirstPart(normalizedTitle);
       if (mediaTitleFirstPart && fullText.includes(mediaTitleFirstPart)) {
         return true;
       }
@@ -1360,13 +1365,11 @@ export class TelegramNestService {
       return false;
     }
 
-    const { season, episode } = media.episodeInfo;
-
     const fullText = `${result.fileName || ""} ${result.caption || ""}`
       .toLowerCase()
       .replace(/_/g, " ");
     const baseTitleLower = baseTitle.toLowerCase();
-    const originalTitleLower = media.title.toLowerCase();
+    const originalTitleLower = normalizedTitle;
 
     // Check if the text contains the title (full or first part)
     let hasTitle =
@@ -1382,7 +1385,7 @@ export class TelegramNestService {
     }
 
     if (!hasTitle) {
-      const mediaTitleFirstPart = this.extractTitleFirstPart(media.title);
+      const mediaTitleFirstPart = this.extractTitleFirstPart(normalizedTitle);
       if (mediaTitleFirstPart && fullText.includes(mediaTitleFirstPart)) {
         hasTitle = true;
       }
@@ -1392,9 +1395,17 @@ export class TelegramNestService {
       return false;
     }
 
+    return this.matchesSeasonEpisode(fullText, media.episodeInfo);
+  }
+
+  private matchesSeasonEpisode(
+    text: string,
+    { season, episode }: EpisodeInfo,
+    language = this.LANGUAGE_CONFIG.preferredLanguage,
+  ): boolean {
+    const fullText = text.toLowerCase().replace(/_/g, " ");
     // Get only English and preferred language configs for pattern matching
-    const languageKey = this.LANGUAGE_CONFIG
-      .preferredLanguage as keyof typeof this.LANGUAGE_CONFIG.languages;
+    const languageKey = language as keyof typeof this.LANGUAGE_CONFIG.languages;
     const preferredLangConfig = this.LANGUAGE_CONFIG.languages[languageKey];
     const englishConfig = this.LANGUAGE_CONFIG.languages.en;
 
@@ -1406,7 +1417,7 @@ export class TelegramNestService {
     // Build regex patterns for precise season/episode matching
     const seasonEpisodeRegexes: RegExp[] = [];
 
-    for (const langConfig of languageConfigs) {
+    for (const langConfig of languageConfigs.filter(Boolean)) {
       // Long format patterns - use whitespace boundaries for non-Latin scripts
       for (const seasonLong of langConfig.seasonTerms.long) {
         for (const episodeLong of langConfig.episodeTerms.long) {
@@ -1461,6 +1472,127 @@ export class TelegramNestService {
 
     // Check if any season/episode pattern matches using regex
     return seasonEpisodeRegexes.some((regex) => regex.test(fullText));
+  }
+
+  private normalizeChannelTitle(title: string): string {
+    return title
+      .normalize("NFKC")
+      .replace(/[\u0591-\u05C7]/g, "")
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}]+/gu, " ")
+      .trim();
+  }
+
+  private async searchSeriesChannelFallback(
+    client: TelegramClient,
+    media: MediaDetails,
+    user: InstanceProfile,
+    baseTitle: string,
+  ): Promise<MediaSearchResult[]> {
+    if (media.type !== "series" || !media.episodeInfo) return [];
+
+    const titles = new Set(
+      [baseTitle, media.localizedTitle, media.title, media.originalTitle]
+        .filter((title): title is string => Boolean(title))
+        // Channels often use only the name before a subtitle separator.
+        // Keep hyphenated names intact (e.g. "Breaking-Bad").
+        .flatMap((title) => [title, title.split(":")[0]])
+        .map((title) => this.normalizeChannelTitle(title))
+        .filter(Boolean),
+    );
+    const { season, episode } = media.episodeInfo;
+    const seasonPadded = String(season).padStart(2, "0");
+    const episodePadded = String(episode).padStart(2, "0");
+    const languageConfigs = [
+      this.LANGUAGE_CONFIG.languages.en,
+      this.LANGUAGE_CONFIG.languages[user.language],
+    ].filter(Boolean);
+    const queries = new Set<string>();
+    for (const config of languageConfigs) {
+      for (const seasonTerm of config.seasonTerms.long) {
+        for (const episodeTerm of config.episodeTerms.long) {
+          queries.add(`${seasonTerm} ${season} ${episodeTerm} ${episode}`);
+          queries.add(
+            `${seasonTerm} ${seasonPadded} ${episodeTerm} ${episodePadded}`,
+          );
+        }
+      }
+      for (const seasonTerm of config.seasonTerms.short) {
+        for (const episodeTerm of config.episodeTerms.short) {
+          for (const [s, e] of [
+            [String(season), String(episode)],
+            [seasonPadded, episodePadded],
+          ]) {
+            queries.add(`${seasonTerm}${s}${episodeTerm}${e}`);
+            queries.add(`${seasonTerm}${s} ${episodeTerm}${e}`);
+          }
+        }
+      }
+    }
+
+    const results: MediaSearchResult[] = [];
+    try {
+      const dialogs = await client.getDialogs({});
+      for (const dialog of dialogs) {
+        const entity = dialog.entity;
+        if (!(entity instanceof Api.Channel || entity instanceof Api.Chat)) {
+          continue;
+        }
+        const channelTitle = dialog.title || entity.title;
+        const normalized = ` ${this.normalizeChannelTitle(channelTitle)} `;
+        if (![...titles].some((title) => normalized.includes(` ${title} `))) {
+          continue;
+        }
+
+        for (const query of queries) {
+          if (!client.connected) return this.removeDuplicates(results, media);
+          try {
+            const messages = await client.getMessages(entity, {
+              search: query,
+              limit: this.SEARCH_CONFIG.globalSearchLimit,
+              filter: new Api.InputMessagesFilterEmpty(),
+            });
+            for (const message of messages) {
+              if (
+                !(message instanceof Api.Message) ||
+                !this.isVideoFromSearchResult(message)
+              ) {
+                continue;
+              }
+              const fileName = this.extractFileNameFromSearchResult(message);
+              const caption = message.message || null;
+              const text = `${fileName || ""} ${caption || ""}`;
+              if (
+                !this.matchesSeasonEpisode(text, media.episodeInfo, user.language)
+              ) {
+                continue;
+              }
+              results.push({
+                chatId: this.normalizeChatId(entity.id.toString()),
+                channelTitle,
+                messageId: message.id,
+                fileName,
+                fileSize: this.extractFileSizeFromSearchResult(message),
+                mimeType: this.extractMimeTypeFromSearchResult(message),
+                caption,
+                ...this.parseMediaIndicators(text),
+                season,
+                episode,
+              });
+            }
+          } catch (error) {
+            logger.warn(
+              { channelTitle, query, error },
+              "Series channel fallback search failed",
+            );
+            break; // Skip inaccessible/failed channels, continue with the others.
+          }
+        }
+      }
+    } catch (error) {
+      logger.warn({ error }, "Series channel fallback discovery failed");
+    }
+    return this.removeDuplicates(results, media);
   }
 
   private escapeRegex(str: string): string {
@@ -1570,6 +1702,19 @@ export class TelegramNestService {
           partialMatches.push(result);
         }
       }
+    }
+
+    // Optional dedicated-channel fallback: remove this block to disable it.
+    if (
+      media.type === "series" &&
+      media.episodeInfo &&
+      exactMatches.length === 0
+    ) {
+      exactMatches.push(
+        ...(await this.searchSeriesChannelFallback(
+          client, media, user, baseTitle,
+        )),
+      );
     }
 
     // Sort exact matches by score

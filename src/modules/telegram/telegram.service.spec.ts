@@ -104,6 +104,189 @@ describe("TelegramNestService - Tag Feature", () => {
     jest.clearAllMocks();
   });
 
+  describe("dedicated series channel fallback", () => {
+    function fixture<T extends object>(prototype: T, fields: Partial<T>): T {
+      return Object.assign(Object.create(prototype), fields);
+    }
+    const media = {
+      id: 1, imdbId: "tt0108778", title: "Friends", localizedTitle: "חברים",
+      originalTitle: "Friends", type: "series" as const,
+      episodeInfo: { season: 1, episode: 2 },
+    };
+    const user: any = {
+      id: 1, token: "fallback-user", language: "he", session_string: "session",
+      selected_channels: "[]", selected_folders: "[]",
+    };
+    function channel(title: string, id = 123) {
+      return { title, entity: fixture(Api.Channel.prototype, { id: bigInt(id), title }) };
+    }
+    function video(fileName: string, id = 7, caption = "", mimeType = "video/mp4") {
+      const document = fixture(Api.Document.prototype, {
+        mimeType, size: bigInt(1024),
+        attributes: [new Api.DocumentAttributeFilename({ fileName })],
+      });
+      return fixture(Api.Message.prototype, {
+        id, message: caption, media: new Api.MessageMediaDocument({ document }),
+      });
+    }
+    let client: any;
+    beforeEach(() => {
+      mockCacheService.getSearchResults.mockReset();
+      mockCacheService.setSearchResults.mockReset();
+      jest.spyOn(service as any, "performGlobalSearch").mockResolvedValue([]);
+      client = {
+        connected: true,
+        getDialogs: jest.fn().mockResolvedValue([channel("Friends - HD")]),
+        getMessages: jest.fn().mockResolvedValue([video("season 1 episode 2.mp4")]),
+      };
+    });
+
+    it("uses a matching unselected channel after normal results are rejected and caches metadata", async () => {
+      (service as any).performGlobalSearch.mockResolvedValue([{
+        chatId: "456", messageId: 8, fileName: "Friends s01e03.mp4", fileSize: 100,
+      }]);
+      const results = await service.searchMedia(client, "חברים", { ...media }, user);
+      expect(results).toHaveLength(1);
+      expect(results[0]).toMatchObject({
+        chatId: "123", channelTitle: "Friends - HD", messageId: 7,
+        season: 1, episode: 2, mimeType: "video/mp4", fileSize: 1024,
+      });
+      expect(mockCacheService.setSearchResults).toHaveBeenCalledWith(
+        user.token, expect.any(String), results,
+      );
+      const queries = client.getMessages.mock.calls.map((call: any[]) => call[1].search);
+      expect(queries).toEqual(expect.arrayContaining([
+        "s01e02", "s1e2", "s01 e02", "season 1 episode 2", "עונה 1 פרק 2",
+      ]));
+      expect(new Set(queries).size).toBe(queries.length);
+      expect(client.getMessages).toHaveBeenCalledWith(client.getDialogs.mock.results[0].value instanceof Promise
+        ? expect.any(Api.Channel) : expect.anything(), expect.objectContaining({ limit: 150 }));
+    });
+
+    it("never runs when normal search has a usable result", async () => {
+      (service as any).performGlobalSearch.mockResolvedValue([{
+        chatId: "456", messageId: 8, fileName: "Friends s01e02.mp4", fileSize: 100,
+      }]);
+      await service.searchMedia(client, "Friends", { ...media }, user);
+      expect(client.getDialogs).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      { ...media, type: "movie" as const, episodeInfo: null },
+      { ...media, episodeInfo: null },
+    ])("never runs without a series episode", async (details) => {
+      await service.searchMedia(client, "Friends", details, user);
+      expect(client.getDialogs).not.toHaveBeenCalled();
+    });
+
+    it("returns cached empty results without invoking the fallback", async () => {
+      mockCacheService.getSearchResults.mockResolvedValue([]);
+      expect(await service.searchMedia(client, "Friends", { ...media }, user)).toEqual([]);
+      expect(client.getDialogs).not.toHaveBeenCalled();
+    });
+
+    it("matches full normalized multilingual titles and excludes unrelated/private dialogs", async () => {
+      const group = { title: "חֲבֵרִים | HD", entity: fixture(Api.Chat.prototype, {
+        id: bigInt(456), title: "חֲבֵרִים | HD",
+      }) };
+      client.getDialogs.mockResolvedValue([
+        channel("MyFriends"), channel("Friend"), channel("Other series"), group,
+        { title: "Friends", entity: fixture(Api.User.prototype, { id: bigInt(789) }) },
+      ]);
+      const results = await service.searchMedia(client, "חברים", { ...media }, user);
+      expect(results[0]).toMatchObject({ chatId: "456", channelTitle: group.title });
+      for (const [entity] of client.getMessages.mock.calls) expect(entity).toBe(group.entity);
+    });
+
+    it("accepts original titles and normalizes punctuation without partial title matching", async () => {
+      client.getDialogs.mockResolvedValue([channel("Breaking | Bad HD"), channel("Breaking HD")]);
+      const details = { ...media, title: "Other", localizedTitle: null, originalTitle: "Breaking-Bad" };
+      const results = await service.searchMedia(client, "Other", details, user);
+      expect(results).toHaveLength(1);
+      expect(results[0].channelTitle).toBe("Breaking | Bad HD");
+    });
+
+    it("validates episode numbers in filenames/captions and rejects non-video documents", async () => {
+      client.getMessages.mockResolvedValue([
+        video("s01e02.mp4", 1), video("עונה 1 פרק 2.mkv", 2),
+        video("episode.mp4", 3, "season 1 episode 2 מדובב"),
+        video("s02e02.mp4", 4), video("s01e20.mp4", 5),
+        video("season 1 episode 21.mp4", 6), video("episode 2.mp4", 7),
+        video("s01e02.pdf", 8, "", "application/pdf"),
+      ]);
+      const results = await service.searchMedia(client, "Friends", { ...media }, user);
+      expect(results.map((result) => result.messageId).sort()).toEqual([1, 2, 3]);
+      expect(results.find((result) => result.messageId === 3)).toMatchObject({ isDubbed: true, score: 170 });
+    });
+
+    it("finds the Frieren short-name channel when metadata contains a subtitle", async () => {
+      const details = {
+        ...media, imdbId: "tt22248376", title: "Frieren: Beyond Journey's End",
+        localizedTitle: "פרירן: מעבר לסוף המסע", originalTitle: "葬送のフリーレン",
+        episodeInfo: { season: 1, episode: 1 },
+      };
+      client.getDialogs.mockResolvedValue([channel("פרירן - ערוץ ראשי")]);
+      client.getMessages.mockResolvedValue([
+        video("1.mp4", 5, "עונה 1 פרק 1"),
+        video("11.mp4", 15, "עונה 1 פרק 11"),
+      ]);
+      const results = await service.searchMedia(client, details.localizedTitle, details, user);
+      expect(results).toHaveLength(1);
+      expect(results[0]).toMatchObject({
+        channelTitle: "פרירן - ערוץ ראשי", messageId: 5, season: 1, episode: 1,
+      });
+    });
+
+    it("searches English short names and accepts dotted release names for localized accounts", async () => {
+      const details = {
+        ...media, title: "Frieren: Beyond Journey's End",
+        localizedTitle: "פרירן: מעבר לסוף המסע", episodeInfo: { season: 1, episode: 1 },
+      };
+      const fileName = "Frieren.Beyond.Journeys.End.S01E01.The.Journeys.End..mkv";
+      (service as any).performGlobalSearch.mockImplementation(async (_client: unknown, query: string) => {
+        return query === "Frieren s01e01" ? [{
+          chatId: "456", channelTitle: "גיבוי פירו 0.2", messageId: 38681,
+          fileName, fileSize: 1024,
+        }] : [];
+      });
+      const results = await service.searchMedia(client, details.localizedTitle, details, user);
+      expect(results).toHaveLength(1);
+      expect(results[0]).toMatchObject({ channelTitle: "גיבוי פירו 0.2", fileName });
+      expect(client.getDialogs).not.toHaveBeenCalled();
+      expect((service as any).performGlobalSearch).toHaveBeenCalledWith(
+        client, "Frieren s01e01", details, undefined,
+      );
+    });
+
+    it("rejects the provided Frieren episode 2 release when episode 1 is requested", () => {
+      const details = { ...media, title: "Frieren: Beyond Journey's End", episodeInfo: { season: 1, episode: 1 } };
+      expect((service as any).checkTitleMatch({
+        fileName: "Frieren.Beyond.Journeys.End.S01E02.It.Didnt.Have.to..mkv",
+      }, details, "פרירן")).toBe(false);
+    });
+
+    it("deduplicates and caps fallback results at the series limit", async () => {
+      client.getMessages.mockResolvedValue(Array.from({ length: 25 }, (_, i) => video(`s01e02 quality${i}.mp4`, i + 1)));
+      expect(await service.searchMedia(client, "Friends", { ...media }, user)).toHaveLength(20);
+    });
+
+    it("skips failed channels and continues searching other matches", async () => {
+      client.getDialogs.mockResolvedValue([channel("Friends failed"), channel("Friends HD", 456)]);
+      client.getMessages.mockImplementation(async (entity: Api.Channel) => {
+        if (entity.id.toString() === "123") throw new Error("channel inaccessible");
+        return [video("s1e2.mp4")];
+      });
+      const results = await service.searchMedia(client, "Friends", { ...media }, user);
+      expect(results).toHaveLength(1);
+      expect(results[0].chatId).toBe("456");
+    });
+
+    it("handles channel discovery errors gracefully", async () => {
+      client.getDialogs.mockRejectedValue(new Error("discovery failed"));
+      expect(await service.searchMedia(client, "Friends", { ...media }, user)).toEqual([]);
+    });
+  });
+
   describe("source channel metadata", () => {
     // Minimal Telegram fixtures retain their API prototypes for runtime type checks.
     function fixture<T extends object>(prototype: T, fields: Partial<T>): T {
