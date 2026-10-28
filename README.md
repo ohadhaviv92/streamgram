@@ -33,6 +33,7 @@
 - [Tag Any Video to a Catalog Item](#tag-any-video-to-a-catalog-item)
 - [Environment Variables](#environment-variables)
 - [Optional Admin Features](#optional-admin-features)
+- [Contributing](#contributing)
 - [Disclaimer](#disclaimer)
 - [Support the project](#support-the-project)
 
@@ -120,8 +121,8 @@ Stremio needs a publicly reachable **domain with HTTPS** for addon and stream UR
 ```bash
 git clone https://github.com/ohadhaviv92/streamgram.git
 cd streamgram
-npm install
-npm run start
+pnpm install --frozen-lockfile
+pnpm run start
 ```
 
 ---
@@ -286,6 +287,12 @@ Admin protection, Telegram notifications, password recovery, and backups are **o
 - **Backup & restore:** download or restore instance backups. Backups contain private Telegram sessions and bot tokens; store them securely.
 
 See [authentication and access documentation](docs/AUTHENTICATION.md) for details.
+
+---
+
+## Contributing
+
+Bug reports, fixes, translations, tests, and documentation improvements are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for Node.js/pnpm prerequisites, development setup, code conventions, validation commands, and the pull request process.
 
 ---
 
