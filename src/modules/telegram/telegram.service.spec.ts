@@ -602,6 +602,92 @@ describe("TelegramNestService - Tag Feature", () => {
     });
   });
 
+  describe("live tags with cached ordinary searches", () => {
+    const user = { id: 1, token: "tag-account", language: "en" } as any;
+    const client = { connected: true } as any;
+    const peer = { kind: "channel" as const, id: "123", accessHash: "456" };
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+      mockCacheService.getSearchResults.mockReset();
+      mockCacheService.setSearchResults.mockReset();
+    });
+
+    it.each([
+      ["movie", "tt0330373"],
+      ["series", "tt0330373:1:2"],
+      ["movie", undefined],
+      ["series", undefined],
+    ])("refreshes additions, edits and removals for %s (%s) while reusing ordinary results", async (type, catalogId) => {
+      const media: any = { title: "Movie", type, year: 2026,
+        episodeInfo: type === "series" ? { season: 1, episode: 2 } : null };
+      const limit = type === "movie" ? 10 : 20;
+      const ordinary = Array.from({ length: limit }, (_, i) => ({
+        peer, chatId: peer.id, messageId: i + 1,
+        fileName: `Movie s01e02 ${i}.mp4`, fileSize: 1000, mimeType: "video/mp4",
+      }));
+      const cache = new Map<string, unknown>();
+      mockCacheService.getSearchResults.mockImplementation(async (token, key) => cache.get(`${token}:${key}`) ?? null);
+      mockCacheService.setSearchResults.mockImplementation(async (token, key, value) => {
+        cache.set(`${token}:${key}`, structuredClone(value));
+        return true;
+      });
+      let liveTags: MediaSearchResult[] = [];
+      let failTags = false;
+      const search = jest.spyOn(service as any, "performGlobalSearch").mockImplementation(async (_client, query) => {
+        if (String(query).startsWith("/tag ")) {
+          if (failTags) throw new Error("Tag search unavailable");
+          return [...liveTags, ordinary[0]];
+        }
+        // A title search may also discover tag messages; those must never be cached.
+        return [...ordinary, { ...ordinary[0], messageId: 99, customName: "incidental-tag" }];
+      });
+      const run = () => service.searchMedia(client, "Movie", media, user, catalogId);
+      const initial = await run();
+      expect(initial).toHaveLength(limit);
+      expect(initial.every((result) => !result.customName)).toBe(true);
+      const initialSearchCount = search.mock.calls.length;
+      expect(initialSearchCount).toBeGreaterThan(1);
+
+      const tagName = catalogId ?? (type === "movie" ? "Movie 2026" : "Movie s01e02");
+      liveTags = [{ ...ordinary[limit - 1], fileName: "🏷️ video.mp4", customName: tagName }];
+      const added = await run();
+      expect(added).toHaveLength(limit);
+      expect(added[0]).toMatchObject({ messageId: limit, customName: tagName, score: 999 });
+      expect(added.filter((result) => result.messageId === limit)).toHaveLength(1);
+
+      liveTags = [{ ...liveTags[0], messageId: 70, fileName: "🏷️ replacement.mp4" }];
+      expect((await run())[0]).toMatchObject({ messageId: 70, customName: tagName });
+      liveTags = [];
+      expect(await run()).toEqual(initial);
+      failTags = true;
+      expect(await run()).toEqual(initial);
+
+      expect(search.mock.calls.slice(initialSearchCount).map((call) => call[1]))
+        .toEqual(Array(4).fill(`/tag ${tagName}`));
+      expect(mockCacheService.setSearchResults).toHaveBeenCalledTimes(1);
+      const [token, key, stored] = mockCacheService.setSearchResults.mock.calls[0];
+      expect(token).toBe(user.token);
+      expect(key).toMatch(/^untagged:/);
+      expect(stored).toHaveLength(limit);
+      expect(stored.every((result: MediaSearchResult) => !result.customName)).toBe(true);
+    });
+
+    it("finds a new tag after caching an empty search", async () => {
+      const media: any = { title: "Movie", type: "movie", episodeInfo: null };
+      const tagged = { peer, chatId: peer.id, messageId: 70, customName: "tt0330373" };
+      mockCacheService.getSearchResults.mockResolvedValue([]);
+      const search = jest.spyOn(service as any, "performGlobalSearch")
+        .mockResolvedValueOnce([]).mockResolvedValueOnce([tagged]);
+
+      expect(await service.searchMedia(client, "Movie", media, user, "tt0330373")).toEqual([]);
+      expect(await service.searchMedia(client, "Movie", media, user, "tt0330373"))
+        .toEqual([expect.objectContaining({ customName: "tt0330373", score: 999 })]);
+      expect(search).toHaveBeenCalledTimes(2);
+      expect(mockCacheService.setSearchResults).not.toHaveBeenCalled();
+    });
+  });
+
   describe("source channel metadata", () => {
     // Minimal Telegram fixtures retain their API prototypes for runtime type checks.
     function fixture<T extends object>(prototype: T, fields: Partial<T>): T {
@@ -1248,9 +1334,9 @@ describe("TelegramNestService - Tag Feature", () => {
         ([_, key]) => key,
       );
       expect(keys[0]).toContain(":he:");
-      expect(keys[1]).toBe("catalog:instance_he_tmdb:550");
+      expect(keys[1]).toBe("untagged:catalog:instance_he_tmdb:550");
       expect(keys[2]).toContain(":ru:");
-      expect(keys[3]).toBe("catalog:instance_ru_tmdb:550");
+      expect(keys[3]).toBe("untagged:catalog:instance_ru_tmdb:550");
     });
   });
 
@@ -1449,13 +1535,6 @@ describe("TelegramNestService - Tag Feature", () => {
         "La casa de papel temporada 2 episodio 3",
         "La casa de papel t02 e03", "Money Heist s02e03",
       ]));
-    });
-
-    it("invalidates Spanish catalog results after sending a tag", async () => {
-      await service.clearCacheByCatalogId("tt1234567", "spanish-account");
-      expect(mockCacheService.deleteSearchResults).toHaveBeenCalledWith(
-        "spanish-account", "catalog:spanish-account_es_tt1234567",
-      );
     });
 
     it("generates Russian localized season and episode queries", () => {

@@ -10,11 +10,13 @@ describe("Tag instruction screen", () => {
     const telegram = {
       getClientForUser: jest.fn(async () => ({})),
       sendMessage: jest.fn(async () => undefined),
-      clearCacheByCatalogId: jest.fn(async () => undefined),
     };
     const cache = {
       get: jest.fn(async () => alreadySent ? "sent" : undefined),
       set: jest.fn(async () => undefined),
+      deleteSearchResults: jest.fn(),
+      del: jest.fn(),
+      clearAll: jest.fn(),
     };
     const controller: StreamController = Reflect.construct(StreamController, [
       {}, telegram, { get: () => undefined }, {}, cache,
@@ -31,7 +33,9 @@ describe("Tag instruction screen", () => {
     expect(telegram.getClientForUser).toHaveBeenCalledWith("account-1", "session");
     expect(telegram.sendMessage).toHaveBeenCalledWith({}, "/tag tt1234567:1:2");
     expect(cache.set).toHaveBeenCalledWith("tag-sent:account-1:tt1234567:1:2", "sent", 300);
-    expect(telegram.clearCacheByCatalogId).toHaveBeenCalledWith("tt1234567:1:2", "account-1");
+    expect(cache.deleteSearchResults).not.toHaveBeenCalled();
+    expect(cache.del).not.toHaveBeenCalled();
+    expect(cache.clearAll).not.toHaveBeenCalled();
     expect(response.setHeader).toHaveBeenCalledWith("Cache-Control", "no-store");
     expect(response.redirect).toHaveBeenCalledWith(302, `https://test.example.com/streamgram/assets/tag-assistant/instructions-${language}.mp4`);
   });

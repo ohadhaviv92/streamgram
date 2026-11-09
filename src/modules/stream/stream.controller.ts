@@ -1093,9 +1093,6 @@ export class StreamController {
 
         // Mark as sent in cache (5 minutes TTL to prevent duplicate sends)
         await this.cache.set(cacheKey, "sent", 300);
-
-        // Clear cache for this search to ensure tagged results appear immediately
-        await this.telegramService.clearCacheByCatalogId(decoded, user.token);
       } else {
         logger.debug(
           { userId: user.id, catalogId: decoded },

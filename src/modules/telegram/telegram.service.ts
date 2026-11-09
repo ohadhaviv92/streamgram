@@ -1917,8 +1917,47 @@ export class TelegramNestService {
     catalogId?: string,
   ): Promise<MediaSearchResult[]> {
     const language = this.refreshRuntimeConfig(user);
-    const episodeInfo = media.episodeInfo || null;
     const queries = this.generateSearchQueries(query, media, catalogId);
+    const tagQueries = queries.filter((value) => this.parseTagCommand(value) !== null);
+    const regularQueries = queries.filter((value) => this.parseTagCommand(value) === null);
+
+    if (!client.connected) {
+      throw new TelegramClientUnavailableError("Telegram client is not connected");
+    }
+
+    // Tags live in Telegram: additions, edits and deletions must be visible on
+    // every request, independently of the longer-lived ordinary search cache.
+    const [tagResults, regularResults] = await Promise.all([
+      Promise.all(tagQueries.map(async (tagQuery) => {
+        try {
+          return (await this.performGlobalSearch(client, tagQuery, media, catalogId))
+            .filter((result) => Boolean(result.customName));
+        } catch (error) {
+          logger.warn({ query: tagQuery, error }, "Tag search failed");
+          return [];
+        }
+      })),
+      this.searchUntaggedMediaWithClient(
+        client, query, media, user, catalogId, language, regularQueries,
+      ),
+    ]);
+    this.clientManager.assertClientUsable(client);
+    const limit = media.type === "movie"
+      ? this.SEARCH_RESULTS.movie.totalResults
+      : this.SEARCH_RESULTS.series.totalResults;
+    return this.removeDuplicates([...tagResults.flat(), ...regularResults], media).slice(0, limit);
+  }
+
+  private async searchUntaggedMediaWithClient(
+    client: TelegramClient,
+    query: string,
+    media: MediaDetails,
+    user: InstanceProfile,
+    catalogId: string | undefined,
+    language: string,
+    queries: string[],
+  ): Promise<MediaSearchResult[]> {
+    const episodeInfo = media.episodeInfo || null;
 
     // Use simplified cache key with catalog ID when available
     let cacheKey: string;
@@ -1940,6 +1979,8 @@ export class TelegramNestService {
       );
     }
 
+    // Do not reuse older cache entries that mixed ordinary and tagged results.
+    cacheKey = `untagged:${cacheKey}`;
     const cached = await this.cache.getSearchResults<MediaSearchResult[]>(
       user.token,
       cacheKey,
@@ -1990,7 +2031,7 @@ export class TelegramNestService {
 
     // Flatten all results
     for (const queryResults of allQueryResults) {
-      aggregateResults.push(...queryResults);
+      aggregateResults.push(...queryResults.filter((result) => !result.customName));
     }
 
     // Remove duplicates first
@@ -2019,7 +2060,7 @@ export class TelegramNestService {
         baseTitle, media, episodeInfo, language,
       ).filter((shortQuery) => !queries.includes(shortQuery));
       const shortResults = this.removeDuplicates(
-        (await searchQueries(shortQueries)).flat(), media,
+        (await searchQueries(shortQueries)).flat().filter((result) => !result.customName), media,
       );
       exactMatches.push(
         ...shortResults.filter((result) => this.checkTitleMatch(result, media, baseTitle)),
@@ -2124,38 +2165,6 @@ export class TelegramNestService {
     this.LANGUAGE_CONFIG.preferredLanguage = language;
     return language;
   }
-  /**
-   * Clear cache for a specific catalog ID after tagging
-   * This ensures tagged results appear immediately on next search
-   */
-  async clearCacheByCatalogId(
-    catalogId: string,
-    userToken: string,
-  ): Promise<void> {
-    try {
-      const languages = ["en", "he", "ru", "ar", "es"];
-      const cacheKeys = languages.map(
-        (language) => `catalog:${userToken}_${language}_${catalogId}`,
-      );
-
-      await Promise.all(
-        cacheKeys.map((cacheKey) =>
-          this.cache.deleteSearchResults(userToken, cacheKey),
-        ),
-      );
-
-      logger.info(
-        { catalogId, userToken, cacheKeys },
-        "Cleared language-specific catalog caches",
-      );
-    } catch (error) {
-      logger.error(
-        { catalogId, error: (error as Error).message },
-        "Failed to clear cache for catalog ID",
-      );
-    }
-  }
-
   /** Capture a complete peer while search still has the typed Telegram entity. */
   private playbackPeer(entity: EntityLike, messagePeer?: Api.TypePeer): PlaybackPeer | undefined {
     try {

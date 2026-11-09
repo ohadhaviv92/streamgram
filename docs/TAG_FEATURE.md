@@ -521,7 +521,7 @@ Check application logs for:
 ### For Developers
 
 1. **Monitor API Limits** - Tag queries count toward Telegram rate limits
-2. **Cache Results** - Tagged results are cached like regular results
+2. **Cache Regular Results Only** - Ordinary search results use the search cache. Tag queries run on every search request, and tagged results are merged first without being cached. This also refreshes changed or deleted tags once Telegram search reflects the change. Sending a tag through the instruction stream preserves the ordinary search cache; only the five-minute duplicate-send marker is stored.
 3. **Log Tag Activity** - Track tag usage for debugging and analytics
 4. **Test Edge Cases** - Non-video messages, deleted messages, private chats
 
