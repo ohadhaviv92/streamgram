@@ -5,9 +5,11 @@ import { TelegramNestService } from "./telegram.service";
 import { CacheService } from "../cache/cache.service";
 import { TelegramClientManager } from "./telegram-client.manager";
 import { MediaSearchResult } from "./types";
-import { Api } from "teleproto";
+import { Api, TelegramClient } from "teleproto";
 import bigInt from "big-integer";
 import configuration from "../../config/configuration";
+import { MediaDetails } from "../tmdb/types";
+import { InstanceProfile } from "../user/instance-profile";
 
 describe("TelegramNestService - Tag Feature", () => {
   let service: TelegramNestService;
@@ -685,6 +687,102 @@ describe("TelegramNestService - Tag Feature", () => {
         .toEqual([expect.objectContaining({ customName: "tt0330373", score: 999 })]);
       expect(search).toHaveBeenCalledTimes(2);
       expect(mockCacheService.setSearchResults).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("movie titles with an inserted installment number", () => {
+    const media: MediaDetails = {
+      id: 674, imdbId: "tt0330373", title: "Harry Potter and the Goblet of Fire",
+      localizedTitle: "הארי פוטר וגביע האש", type: "movie", year: 2005,
+    };
+    const video = (messageId: number, fileName: string, caption: string | null = null): MediaSearchResult => ({
+      peer: { kind: "channel", id: "123", accessHash: "456" }, chatId: "123", messageId,
+      fileName, caption, fileSize: 1979486489, mimeType: "video/mp4",
+    });
+    const matches = (result: MediaSearchResult, details = media) =>
+      (service as unknown as {
+        checkTitleMatch(result: MediaSearchResult, media: MediaDetails, title: string): boolean;
+      }).checkTitleMatch(result, details, details.localizedTitle || details.title);
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+      mockCacheService.getSearchResults.mockReset();
+      mockCacheService.setSearchResults.mockReset();
+    });
+
+    it.each([
+      "הארי פוטר 4 וגביע האש מדובב 2005 1080p.mkv",
+      "הארי פוטר 4️⃣: וגביע האש - 2005 מדובב.mp4",
+      "הארי_פוטר_4_וגביע_האש_מדובב.mkv",
+      "הארי פוטר 4.\nוגביע האש מדובב",
+      "הָארִי פּוֹטֶר 4 — וְגָבִיעַ הָאֵשׁ מדובב",
+      "Harry.Potter.4.and.the.Goblet.of.Fire.2005.HebDub.mkv",
+    ])("matches the complete movie title around one installment number in %s", (fileName) => {
+      expect(matches(video(1, fileName))).toBe(true);
+    });
+
+    it("matches the real dubbed release through its caption", () => {
+      expect(matches(video(1, "1080p BluRay 2005 ז.מ הארי פוטר 4 מדובב.mp4",
+        "הארי פוטר 4️⃣: וגביע האש - 2005\n\nאיכות: 1080p BluRay. 😍\nמדובב לעברית. 🗣"))).toBe(true);
+    });
+
+    it.each([
+      "הארי פוטר 1 ואבן החכמים מדובב.mp4",
+      "הארי פוטר 5 ומסדר עוף החול מדובב.mp4",
+      "הארי פוטר 4 מדובב.mp4",
+      "הארי פוטר 4 וגביע מדובב.mp4",
+      "הארי פוטר 4 והאש גביע מדובב.mp4",
+      "הארי פוטר 4 5 וגביע האש.mp4",
+      "הארי פוטר 4 וגביע 5 האש.mp4",
+      "הארי פוטר 2005 וגביע האש.mp4",
+      "הארי פוטר4 וגביע האש.mp4",
+      "הארי פוטר 4extra וגביע האש.mp4",
+      "הארי פוטר 4 וגביע האשמות.mp4",
+      "הארי unrelated פוטר 4 וגביע האש.mp4",
+    ])("rejects other movies and incomplete or unrelated titles in %s", (fileName) => {
+      expect(matches(video(1, fileName))).toBe(false);
+    });
+
+    it.each([
+      ["1917", "1917.2019.mkv", true],
+      ["1917", "2017.2019.mkv", false],
+      ["2001 A Space Odyssey", "2001.A.Space.Odyssey.1968.mkv", true],
+      ["2001 A Space Odyssey", "2002.A.Space.Odyssey.1968.mkv", false],
+      ["The 40 Year Old Virgin", "The.40.Year.Old.Virgin.mkv", true],
+      ["The 40 Year Old Virgin", "The.41.Year.Old.Virgin.mkv", false],
+    ])("preserves meaningful numbers in the title %s (%s)", (title, fileName, expected) => {
+      expect(matches(video(1, fileName), { ...media, title, localizedTitle: null })).toBe(expected);
+    });
+
+    it("does not apply the relaxed movie matcher to series episodes", () => {
+      expect(matches(video(1, "Harry Potter 4 and the Goblet of Fire s01e01.mkv"), {
+        ...media, type: "series", episodeInfo: { season: 1, episode: 1 },
+      })).toBe(false);
+    });
+
+    it("includes both real dubbed releases among ten sources without a tag", async () => {
+      const subtitled = Array.from({ length: 10 }, (_, i) => ({
+        ...video(i + 1, `הארי פוטר וגביע האש 2005 תרגום מובנה ${i}.mkv`), hasSubtitles: true,
+      }));
+      const dubbed = [
+        { ...video(20, "הארי פוטר 4 וגביע האש מדובב 2005 1080p.mkv"), isDubbed: true },
+        { ...video(21, "1080p BluRay 2005 ז.מ הארי פוטר 4 מדובב.mp4",
+          "הארי פוטר 4️⃣: וגביע האש - 2005\nמדובב לעברית"), isDubbed: true },
+      ];
+      mockCacheService.getSearchResults.mockResolvedValue(null);
+      jest.spyOn(service as unknown as {
+        performGlobalSearch(client: unknown, query: string): Promise<MediaSearchResult[]>;
+      }, "performGlobalSearch").mockImplementation(async (_client, query) =>
+        String(query).startsWith("/tag ") ? [] : [...subtitled, ...dubbed]);
+
+      const results = await service.searchMedia({ connected: true } as TelegramClient,
+        media.localizedTitle || media.title, media,
+        { id: 1, token: "movie-matching-test", language: "he" } as InstanceProfile, media.imdbId);
+
+      expect(results).toHaveLength(10);
+      expect(results.filter((result) => result.isDubbed).map((result) => result.messageId)).toEqual([20, 21]);
+      expect(results.every((result) => !result.customName)).toBe(true);
+      expect(new Set(results.map((result) => result.messageId)).size).toBe(10);
     });
   });
 

@@ -1542,7 +1542,8 @@ export class TelegramNestService {
       const normalizedText = ` ${this.normalizeSearchText(fullText)} `;
       return [baseTitle, normalizedTitle].some((title) => {
         const prepared = this.normalizeSearchText(this.prepareSearchTitle(title));
-        return Boolean(prepared && normalizedText.includes(` ${prepared} `));
+        return Boolean(prepared && normalizedText.includes(` ${prepared} `)) ||
+          this.matchesMovieTitleWithPartNumber(normalizedText, this.normalizeSearchText(title));
       });
     }
 
@@ -1568,6 +1569,22 @@ export class TelegramNestService {
     }
 
     return this.matchesSeasonEpisode(fullText, media.episodeInfo);
+  }
+
+  private matchesMovieTitleWithPartNumber(text: string, title: string): boolean {
+    const words = title.split(" ").filter(Boolean);
+    // Require meaningful context on both sides of the inserted number. Keep
+    // every original title word and number, in order; never drop a subtitle.
+    for (let split = 2; split <= words.length - 2; split++) {
+      if (!/\p{L}/u.test(words[split - 1]) || !/\p{L}/u.test(words[split])) continue;
+      const before = words.slice(0, split).map((word) => this.escapeRegex(word)).join(" ");
+      const after = words.slice(split).map((word) => this.escapeRegex(word)).join(" ");
+      // A single standalone part number (1-99), not a release year or arbitrary text.
+      if (new RegExp(`(?:^| )${before} [1-9][0-9]? ${after}(?: |$)`, "u").test(text)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private matchesSeasonEpisode(
