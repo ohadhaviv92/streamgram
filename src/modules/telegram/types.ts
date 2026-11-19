@@ -9,6 +9,8 @@ export interface MediaSearchResult {
   messageId: number;
   fileName: string | null;
   fileSize: number;
+  /** Telegram document creation date as a Unix timestamp in seconds. */
+  uploadedAt?: number;
   mimeType: string | null;
   caption?: string | null;
   hasSubtitles?: boolean;

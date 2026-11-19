@@ -83,7 +83,7 @@ describe("Telegram library Stremio HTTP contract", () => {
   });
 
   it("shows the source in search details, fresh metadata, and the single playback stream", async () => {
-    const result = { ...file(), channelTitle: "  My\nTelegram Channel  " };
+    const result = { ...file(), channelTitle: "  My\nTelegram Channel  ", uploadedAt: Date.parse("2026-02-09T23:59:59Z") / 1000 };
     telegram.searchLibrary.mockResolvedValue([result]);
     telegram.getLibraryFile.mockResolvedValue(result);
     const { metas } = await (await get("catalog/movie/tg_library/search=messi.json")).json() as { metas: Array<{ id: string; description: string }> };
@@ -92,7 +92,7 @@ describe("Telegram library Stremio HTTP contract", () => {
     expect(meta.description).toBe(metas[0].description);
     const { streams } = await (await get(`stream/movie/${metas[0].id}.json`)).json() as StreamsResponseDto;
     expect(streams).toHaveLength(1);
-    expect(streams[0].title).toContain("📣 My Telegram Channel");
+    expect(streams[0].title).toBe("match.mp4\n📣 My Telegram Channel\n💾 0MB · 09/02/2026");
   });
 
   it("returns 404 for missing or empty queries and empty results for whitespace", async () => {

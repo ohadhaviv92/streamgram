@@ -128,7 +128,7 @@ describe("TelegramNestService - Tag Feature", () => {
     }
     function video(fileName: string, id = 7, caption = "", mimeType = "video/mp4") {
       const document = fixture(Api.Document.prototype, {
-        mimeType, size: bigInt(1024),
+        mimeType, size: bigInt(1024), date: 1700000000,
         attributes: [new Api.DocumentAttributeFilename({ fileName })],
       });
       return fixture(Api.Message.prototype, {
@@ -170,7 +170,7 @@ describe("TelegramNestService - Tag Feature", () => {
       expect(results).toHaveLength(1);
       expect(results[0]).toMatchObject({
         peer: { kind: "channel" as const, id: "123", accessHash: "456" }, chatId: "123", channelTitle: "Friends - HD", messageId: 7,
-        season: 1, episode: 2, mimeType: "video/mp4", fileSize: 1024,
+        season: 1, episode: 2, mimeType: "video/mp4", fileSize: 1024, uploadedAt: 1700000000,
       });
       expect(mockCacheService.setSearchResults).toHaveBeenCalledWith(
         user.token, expect.any(String), results,
@@ -801,11 +801,11 @@ describe("TelegramNestService - Tag Feature", () => {
       id: bigInt(456), title: "Tag Channel", accessHash: bigInt(789),
     });
     const document = fixture(Api.Document.prototype, {
-      mimeType: "video/mp4", size: bigInt(1024),
+      mimeType: "video/mp4", size: bigInt(1024), date: 1700000000,
       attributes: [new Api.DocumentAttributeFilename({ fileName: "Movie.mp4" })],
     });
     const video = fixture(Api.Message.prototype, {
-      id: 7, peerId: channelPeer, message: "Movie",
+      id: 7, peerId: channelPeer, message: "Movie", date: 1800000000,
       media: new Api.MessageMediaDocument({ document }),
     });
     const media = { title: "Movie", type: "movie", episodeInfo: null };
@@ -888,14 +888,14 @@ describe("TelegramNestService - Tag Feature", () => {
         getInputEntity: jest.fn(async (peer: Api.PeerChannel) => new Api.InputPeerChannel({ channelId: peer.channelId, accessHash: bigInt(456) })),
       };
       const results = await (service as any).performGlobalSearch(client, "Movie", media);
-      expect(results[0]).toMatchObject({ peer: { kind: "channel" as const, id: "123", accessHash: "456" }, chatId: "123", channelTitle: "Video Channel" });
+      expect(results[0]).toMatchObject({ peer: { kind: "channel" as const, id: "123", accessHash: "456" }, chatId: "123", channelTitle: "Video Channel", uploadedAt: 1700000000 });
       expect(client.invoke).toHaveBeenCalledTimes(1);
       expect(client.getInputEntity).toHaveBeenCalledTimes(1);
     });
 
     it("uses the tagged video's peer, not the tag message's channel", async () => {
       const tag = fixture(Api.Message.prototype, {
-        id: 8, peerId: otherPeer, message: "/tag tt123",
+        id: 8, peerId: otherPeer, message: "/tag tt123", date: 1900000000,
         replyTo: new Api.MessageReplyHeader({ replyToMsgId: 7 }),
       });
       const client = {
@@ -905,7 +905,7 @@ describe("TelegramNestService - Tag Feature", () => {
         getMessages: jest.fn().mockResolvedValue([video]),
       };
       const results = await (service as any).performGlobalSearch(client, "Movie", media, "tt123");
-      expect(results[0]).toMatchObject({ peer: { kind: "channel" as const, id: "123", accessHash: "456" }, chatId: "123", messageId: 7, channelTitle: "Video Channel" });
+      expect(results[0]).toMatchObject({ peer: { kind: "channel" as const, id: "123", accessHash: "456" }, chatId: "123", messageId: 7, channelTitle: "Video Channel", uploadedAt: 1700000000 });
       expect(client.invoke).toHaveBeenCalledTimes(1);
       expect(client.getMessages).toHaveBeenCalledTimes(1);
     });
@@ -920,6 +920,25 @@ describe("TelegramNestService - Tag Feature", () => {
       expect(results).toHaveLength(1);
       expect(results[0].channelTitle).toBeUndefined();
     });
+
+    it.each([undefined, 0, -1, NaN, Infinity, 1.5, Number.MAX_SAFE_INTEGER])(
+      "does not substitute the message date for invalid document date %s", async (date) => {
+        const undatedVideo = fixture(Api.Message.prototype, {
+          ...video,
+          media: new Api.MessageMediaDocument({
+            document: fixture(Api.Document.prototype, { ...document, date }),
+          }),
+        });
+        const client = {
+          connected: true,
+          invoke: jest.fn().mockResolvedValue(searchResponse([undatedVideo], [channel])),
+          getInputEntity: jest.fn().mockResolvedValue(new Api.InputPeerChannel({ channelId: bigInt(123), accessHash: bigInt(456) })),
+        };
+        const results = await (service as any).performGlobalSearch(client, "Movie", media);
+        expect(results).toHaveLength(1);
+        expect(results[0].uploadedAt).toBeUndefined();
+      },
+    );
 
     it("captures a user peer from global search", async () => {
       const userPeer = new Api.PeerUser({ userId: bigInt(123) });
@@ -978,7 +997,7 @@ describe("TelegramNestService - Tag Feature", () => {
       };
       mockClientManager.getOrInitializeClient.mockResolvedValue(client);
       const results = await service.getChannelMessages("account", "session", "-100123");
-      expect(results[0]).toMatchObject({ peer: { kind: "channel" as const, id: "123", accessHash: "456" }, chatId: "123", channelTitle: "Video Channel" });
+      expect(results[0]).toMatchObject({ peer: { kind: "channel" as const, id: "123", accessHash: "456" }, chatId: "123", channelTitle: "Video Channel", uploadedAt: 1700000000 });
       expect(client.getEntity).toHaveBeenCalledTimes(1);
       expect(client.invoke).toHaveBeenCalledTimes(1);
     });

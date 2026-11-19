@@ -200,20 +200,32 @@ export function formatStreamForStremio(
     titleLines.push(displayName);
   }
 
-  const sourceParts: string[] = [];
+  const channelTitle = result.channelTitle?.replace(/\s+/g, " ").trim();
+  if (channelTitle) titleLines.push(`📣 ${channelTitle}`);
+
+  const fileParts: string[] = [];
   if (result.fileSize) {
     const sizeMb = result.fileSize / (1024 * 1024);
     if (sizeMb >= 1024) {
       const sizeGb = Math.round((sizeMb / 1024) * 100) / 100;
-      sourceParts.push(`💾 ${sizeGb}GB`);
+      fileParts.push(`💾 ${sizeGb}GB`);
     } else {
-      sourceParts.push(`💾 ${Math.round(sizeMb)}MB`);
+      fileParts.push(`💾 ${Math.round(sizeMb)}MB`);
     }
   }
 
-  const channelTitle = result.channelTitle?.replace(/\s+/g, " ").trim();
-  if (channelTitle) sourceParts.push(`📣 ${channelTitle}`);
-  if (sourceParts.length) titleLines.push(sourceParts.join(" "));
+  const uploadedAt = result.uploadedAt;
+  if (typeof uploadedAt === "number" && Number.isInteger(uploadedAt) && uploadedAt > 0) {
+    const uploadedDate = new Date(uploadedAt * 1000);
+    if (Number.isFinite(uploadedDate.getTime())) {
+      const day = String(uploadedDate.getUTCDate()).padStart(2, "0");
+      const month = String(uploadedDate.getUTCMonth() + 1).padStart(2, "0");
+      const year = String(uploadedDate.getUTCFullYear()).padStart(4, "0");
+      fileParts.push(`${day}/${month}/${year}`);
+    }
+  }
+
+  if (fileParts.length) titleLines.push(fileParts.join(" · "));
 
   return {
     name: metadataParts.join("\n"),

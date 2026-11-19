@@ -16,7 +16,7 @@ function video(id: number, mimeType = "video/mp4", filename = "file.mp4", thumbs
     peerId: new Api.PeerChannel({ channelId: bigInt(12) }),
     media: new Api.MessageMediaDocument({ document: fixture(Api.Document.prototype, {
       id: bigInt(id), accessHash: bigInt(55), fileReference: Buffer.from("ref"), dcId: 2,
-      mimeType, size: bigInt(1000000000), thumbs,
+      mimeType, size: bigInt(1000000000), thumbs, date: 1600000000,
       attributes: [new Api.DocumentAttributeFilename({ fileName: filename })],
     }) }),
   });
@@ -55,6 +55,7 @@ describe("Raw Telegram library search", () => {
     expect(results.map(r => r.messageId)).toEqual([1, 2]);
     expect(results[0].peer).toEqual(peer);
     expect(results[0].channelTitle).toBe("Channel");
+    expect(results.map(r => r.uploadedAt)).toEqual([1600000000, 1600000000]);
     expect(client.iterDownload).not.toHaveBeenCalled();
     expect(client.downloadMedia).not.toHaveBeenCalled();
     expect(release).toHaveBeenCalledTimes(1);
@@ -117,7 +118,7 @@ describe("Library reads and on-demand thumbnails", () => {
   it("reads video metadata without cache or downloading media", async () => {
     const { service, client, release } = setup();
     client.getMessages.mockResolvedValue([video(9)]);
-    expect(await service.getLibraryFile(user, peer, 9)).toMatchObject({ messageId: 9, caption: "Caption 9" });
+    expect(await service.getLibraryFile(user, peer, 9)).toMatchObject({ messageId: 9, caption: "Caption 9", uploadedAt: 1600000000 });
     expect(client.getMessages.mock.calls[0][0]).toBeInstanceOf(Api.InputPeerChannel);
     expect(client.iterDownload).not.toHaveBeenCalled();
     expect(release).toHaveBeenCalledTimes(1);

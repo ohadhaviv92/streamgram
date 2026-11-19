@@ -128,10 +128,10 @@ describe("Stremio Utilities", () => {
     };
 
     it.each([
-      [1.5 * 1024 ** 3, "💾 1.5GB 📣 Movie Channel"],
-      [700 * 1024 ** 2, "💾 700MB 📣 Movie Channel"],
+      [1.5 * 1024 ** 3, "📣 Movie Channel\n💾 1.5GB"],
+      [700 * 1024 ** 2, "📣 Movie Channel\n💾 700MB"],
       [0, "📣 Movie Channel"],
-    ])("shows size %s beside the channel", (fileSize, line) => {
+    ])("shows the channel on its own line before size %s", (fileSize, line) => {
       const result = formatStreamForStremio("instance", { ...video, fileSize });
       expect(result?.title).toBe(`Movie.1080p.mkv\n${line}`);
       expect(result?.url).toBe("https://test.example.com/watch/channel/123/456/456");
@@ -150,7 +150,37 @@ describe("Stremio Utilities", () => {
           ...video,
           channelTitle: ` \n${channelTitle.replace(/ /g, "\t\n")}  `,
         });
-        expect(result?.title).toBe(`Movie.1080p.mkv\n💾 1.5GB 📣 ${channelTitle}`);
+        expect(result?.title).toBe(`Movie.1080p.mkv\n📣 ${channelTitle}\n💾 1.5GB`);
+      },
+    );
+
+    it.each([
+      [1.5 * 1024 ** 3, "Movie Channel", "📣 Movie Channel\n💾 1.5GB · 09/02/2026"],
+      [0, "Movie Channel", "📣 Movie Channel\n09/02/2026"],
+      [1.5 * 1024 ** 3, undefined, "💾 1.5GB · 09/02/2026"],
+      [0, undefined, "09/02/2026"],
+    ])("shows size %s and upload date together after channel %s", (fileSize, channelTitle, line) => {
+      const result = formatStreamForStremio("instance", {
+        ...video, fileSize, channelTitle,
+        uploadedAt: Date.parse("2026-02-09T23:59:59Z") / 1000,
+      });
+      expect(result?.title).toBe(`Movie.1080p.mkv\n${line}`);
+    });
+
+    it.each([
+      ["2026-02-09T23:59:59Z", "09/02/2026"],
+      ["2026-02-10T00:00:00Z", "10/02/2026"],
+    ])("formats %s using the UTC day", (timestamp, date) => {
+      const result = formatStreamForStremio("instance", {
+        ...video, uploadedAt: Date.parse(timestamp) / 1000,
+      });
+      expect(result?.title).toBe(`Movie.1080p.mkv\n📣 Movie Channel\n💾 1.5GB · ${date}`);
+    });
+
+    it.each([undefined, 0, -1, NaN, Infinity, 1.5, Number.MAX_SAFE_INTEGER])(
+      "omits unavailable or invalid upload date %s", (uploadedAt) => {
+        const result = formatStreamForStremio("instance", { ...video, uploadedAt });
+        expect(result?.title).toBe("Movie.1080p.mkv\n📣 Movie Channel\n💾 1.5GB");
       },
     );
 

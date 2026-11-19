@@ -558,6 +558,19 @@ export class TelegramNestService {
     return 0;
   }
 
+  private extractUploadDateFromSearchResult(message: Api.Message): number | undefined {
+    if (
+      message.media instanceof Api.MessageMediaDocument &&
+      message.media.document instanceof Api.Document
+    ) {
+      const date = message.media.document.date;
+      if (Number.isInteger(date) && date > 0 && Number.isFinite(new Date(date * 1000).getTime())) {
+        return date;
+      }
+    }
+    return undefined;
+  }
+
   private extractMimeTypeFromSearchResult(
     rawMessage: Api.Message,
   ): string | null {
@@ -1245,6 +1258,7 @@ export class TelegramNestService {
                   ? channelTitles.get(this.peerKey(originalMessage.peerId))
                   : undefined,
                 messageId: originalMessage.id,
+                uploadedAt: this.extractUploadDateFromSearchResult(originalMessage),
                 fileName: displayName,
                 fileSize,
                 mimeType,
@@ -1288,6 +1302,7 @@ export class TelegramNestService {
             chatId: peer.id,
             channelTitle: channelTitles.get(peerKey),
             messageId: rawMessage.id,
+            uploadedAt: this.extractUploadDateFromSearchResult(rawMessage),
             fileName,
             fileSize,
             mimeType,
@@ -1390,6 +1405,7 @@ export class TelegramNestService {
   private libraryResult(message: Api.Message, peer: PlaybackPeer, channelTitle?: string): MediaSearchResult {
     return {
       peer, chatId: peer.id, messageId: message.id,
+      uploadedAt: this.extractUploadDateFromSearchResult(message),
       fileName: this.extractFileNameFromSearchResult(message),
       fileSize: this.extractFileSizeFromSearchResult(message),
       mimeType: this.extractMimeTypeFromSearchResult(message),
@@ -1845,6 +1861,7 @@ export class TelegramNestService {
                 chatId: peer.id,
                 channelTitle,
                 messageId: message.id,
+                uploadedAt: this.extractUploadDateFromSearchResult(message),
                 fileName,
                 fileSize: this.extractFileSizeFromSearchResult(message),
                 mimeType: this.extractMimeTypeFromSearchResult(message),
@@ -2953,6 +2970,7 @@ export class TelegramNestService {
               chatId: peer.id,
               channelTitle: "title" in channel ? channel.title : undefined,
               messageId: message.id,
+              uploadedAt: this.extractUploadDateFromSearchResult(message),
               fileName: fileName || null,
               fileSize,
               mimeType: mimeType || null,
