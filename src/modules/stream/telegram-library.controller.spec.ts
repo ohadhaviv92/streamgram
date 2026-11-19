@@ -92,7 +92,7 @@ describe("Telegram library Stremio HTTP contract", () => {
     expect(meta.description).toBe(metas[0].description);
     const { streams } = await (await get(`stream/movie/${metas[0].id}.json`)).json() as StreamsResponseDto;
     expect(streams).toHaveLength(1);
-    expect(streams[0].title).toBe("match.mp4\n📣 My Telegram Channel\n💾 0MB · 09/02/2026");
+    expect(streams[0].title).toBe("match.mp4\n📣 My Telegram Channel\n💾 0MB 📤 09/02/2026");
   });
 
   it("returns 404 for missing or empty queries and empty results for whitespace", async () => {

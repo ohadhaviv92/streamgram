@@ -221,11 +221,11 @@ export function formatStreamForStremio(
       const day = String(uploadedDate.getUTCDate()).padStart(2, "0");
       const month = String(uploadedDate.getUTCMonth() + 1).padStart(2, "0");
       const year = String(uploadedDate.getUTCFullYear()).padStart(4, "0");
-      fileParts.push(`${day}/${month}/${year}`);
+      fileParts.push(`📤 ${day}/${month}/${year}`);
     }
   }
 
-  if (fileParts.length) titleLines.push(fileParts.join(" · "));
+  if (fileParts.length) titleLines.push(fileParts.join(" "));
 
   return {
     name: metadataParts.join("\n"),

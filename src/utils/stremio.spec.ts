@@ -155,10 +155,10 @@ describe("Stremio Utilities", () => {
     );
 
     it.each([
-      [1.5 * 1024 ** 3, "Movie Channel", "📣 Movie Channel\n💾 1.5GB · 09/02/2026"],
-      [0, "Movie Channel", "📣 Movie Channel\n09/02/2026"],
-      [1.5 * 1024 ** 3, undefined, "💾 1.5GB · 09/02/2026"],
-      [0, undefined, "09/02/2026"],
+      [1.5 * 1024 ** 3, "Movie Channel", "📣 Movie Channel\n💾 1.5GB 📤 09/02/2026"],
+      [0, "Movie Channel", "📣 Movie Channel\n📤 09/02/2026"],
+      [1.5 * 1024 ** 3, undefined, "💾 1.5GB 📤 09/02/2026"],
+      [0, undefined, "📤 09/02/2026"],
     ])("shows size %s and upload date together after channel %s", (fileSize, channelTitle, line) => {
       const result = formatStreamForStremio("instance", {
         ...video, fileSize, channelTitle,
@@ -174,7 +174,7 @@ describe("Stremio Utilities", () => {
       const result = formatStreamForStremio("instance", {
         ...video, uploadedAt: Date.parse(timestamp) / 1000,
       });
-      expect(result?.title).toBe(`Movie.1080p.mkv\n📣 Movie Channel\n💾 1.5GB · ${date}`);
+      expect(result?.title).toBe(`Movie.1080p.mkv\n📣 Movie Channel\n💾 1.5GB 📤 ${date}`);
     });
 
     it.each([undefined, 0, -1, NaN, Infinity, 1.5, Number.MAX_SAFE_INTEGER])(
