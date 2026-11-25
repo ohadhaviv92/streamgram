@@ -824,7 +824,6 @@ export class StreamController {
 
       const mediaDetails = mapSearchPayloadToMediaDetails(result);
       const streams = result.results
-        .slice(0, 10)
         .map((item) =>
           formatStreamForStremio(
             req.user.token,

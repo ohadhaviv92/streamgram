@@ -126,6 +126,7 @@ export class TmdbService {
     url: string,
     params: Record<string, string>,
     customToken?: string,
+    timeoutMs?: number,
   ): Promise<T> {
     const uri = new URL(url);
     Object.entries(params).forEach(([key, value]) =>
@@ -142,16 +143,39 @@ export class TmdbService {
     const scope = createHash("sha256").update(token).digest("hex");
     return this.cache.remember<T>(`tmdb:${scope}:${uri}`, (value) => {
       const resultLists = Object.entries(value as Record<string, unknown>)
-        .filter(([key]) => key.endsWith("_results"));
+        .filter(([key]) => key === "results" || key.endsWith("_results"));
       const emptyLookup = resultLists.length > 0 && resultLists.every(([, list]) => Array.isArray(list) && list.length === 0);
       return emptyLookup ? 60 : this.configService.get<number>("cache.tmdbTtl", 86400);
     }, async () => {
       const response = await fetch(uri.toString(), {
         headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined,
       });
       if (!response.ok) throw new Error(`TMDB request failed with status ${response.status}`);
       return (await response.json()) as T;
     });
+  }
+
+  async getCompetingSeriesTitles(media: MediaDetails, language: string, token?: string): Promise<string[]> {
+    if (!media.id) return [];
+    const searches = [{ query: media.title, language: "en" }];
+    if (language !== "en" && media.localizedTitle) {
+      searches.push({ query: media.localizedTitle, language });
+    }
+    type Show = { id: number; name: string; original_name: string };
+    const pages = await Promise.allSettled(searches.map((params) =>
+      this.get<{ results: Show[] }>(`${this.baseUrl}/search/tv`, params, token, 3000),
+    ));
+    const titles = new Set<string>();
+    for (const page of pages) {
+      if (page.status !== "fulfilled" || !Array.isArray(page.value.results)) continue;
+      for (const show of page.value.results) {
+        if (show.id === media.id) continue;
+        if (show.name) titles.add(show.name);
+        if (show.original_name) titles.add(show.original_name);
+      }
+    }
+    return [...titles];
   }
 
   private extractYear(date?: string): number | null {

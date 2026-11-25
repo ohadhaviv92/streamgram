@@ -40,6 +40,28 @@ describe("External metadata caching", () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
+  it("reuses competing titles across episodes and keeps localized matches when English search fails", async () => {
+    const fetcher = jest.spyOn(global, "fetch").mockImplementation(async (input) => {
+      const url = new URL(String(input));
+      expect(url.pathname).toBe("/3/search/tv");
+      if (url.searchParams.get("language") === "en") return new Response("", { status: 503 });
+      expect(url.searchParams.get("query")).toBe("דוגמה");
+      return new Response(JSON.stringify({ results: [
+        { id: 1, name: "דוגמה", original_name: "Example" },
+        { id: 2, name: "דוגמה נוספת", original_name: "Another Example" },
+      ] }));
+    });
+    const service = new TmdbService(config, new CacheService(createCache(), config));
+    const media = { id: 1, imdbId: "tt1234567", type: "series" as const, title: "Example", localizedTitle: "דוגמה" };
+    for (const episode of [5, 6]) {
+      expect(await service.getCompetingSeriesTitles({ ...media, episodeInfo: { season: 1, episode } }, "he"))
+        .toEqual(["דוגמה נוספת", "Another Example"]);
+    }
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(await service.getCompetingSeriesTitles({ ...media, id: 0 }, "he")).toEqual([]);
+    expect(fetcher).toHaveBeenCalledTimes(3);
+  });
+
   it("caches Wikidata titles for seven days with language-specific keys", async () => {
     let now = Date.now();
     jest.spyOn(Date, "now").mockImplementation(() => now);

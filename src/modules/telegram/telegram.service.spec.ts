@@ -9,6 +9,10 @@ import { Api, TelegramClient } from "teleproto";
 import bigInt from "big-integer";
 import configuration from "../../config/configuration";
 import { MediaDetails } from "../tmdb/types";
+import { TmdbService } from "../tmdb/tmdb.service";
+import { StreamController } from "../stream/stream.controller";
+import { StreamHandlerService } from "../stream/stream-handler.service";
+import { Request } from "express";
 import { InstanceProfile } from "../user/instance-profile";
 
 describe("TelegramNestService - Tag Feature", () => {
@@ -19,47 +23,8 @@ describe("TelegramNestService - Tag Feature", () => {
       const config: Record<string, any> = {
         "telegram.apiId": 12345,
         "telegram.apiHash": "test-hash",
-        language: {
-          defaultLanguage: "en",
-          preferredLanguage: "he",
-          languages: {
-            es: configuration().language.languages.es,
-            en: {
-              name: "english",
-              tmdbCode: "en",
-              seasonTerms: { long: ["season"], short: ["s"] },
-              episodeTerms: { long: ["episode"], short: ["e"] },
-              subtitleIndicators: ["hebsub"],
-              dubbedIndicators: ["hebdub"],
-              subtitleLabel: "Built-in Subtitles",
-              dubbedLabel: "Dubbed",
-            },
-            he: {
-              name: "hebrew",
-              tmdbCode: "he",
-              seasonTerms: { long: ["עונה"], short: ["ע"] },
-              episodeTerms: { long: ["פרק"], short: ["פ"] },
-              subtitleIndicators: ["ת.מ", "תרגום מובנה"],
-              dubbedIndicators: ["מדובב"],
-              subtitleLabel: "תרגום מובנה",
-              dubbedLabel: "מדובב",
-            },
-            ru: {
-              name: "russian",
-              tmdbCode: "ru",
-              seasonTerms: { long: ["сезон"], short: ["с"] },
-              episodeTerms: { long: ["серия", "эпизод"], short: ["э"] },
-              subtitleIndicators: ["русские субтитры", "субтитры"],
-              dubbedIndicators: ["дубляж", "озвучка"],
-              subtitleLabel: "Встроенные субтитры",
-              dubbedLabel: "Дубляж",
-            },
-          },
-        },
-        searchResults: {
-          movie: { totalResults: 10 },
-          series: { totalResults: 20 },
-        },
+        language: { ...configuration().language, preferredLanguage: "he" },
+        searchResults: configuration().searchResults,
         search: {
           globalSearchLimit: 150,
         },
@@ -80,6 +45,8 @@ describe("TelegramNestService - Tag Feature", () => {
     deleteSearchResults: jest.fn(),
   };
 
+  const competingTitles = jest.fn<Promise<string[]>, unknown[]>();
+
   const mockClientManager = {
     retainClient: jest.fn(() => jest.fn()),
     assertClientUsable: jest.fn(),
@@ -91,6 +58,7 @@ describe("TelegramNestService - Tag Feature", () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TelegramNestService,
+        { provide: TmdbService, useValue: { getCompetingSeriesTitles: competingTitles } },
         {
           provide: ConfigService,
           useValue: mockConfigService,
@@ -108,6 +76,7 @@ describe("TelegramNestService - Tag Feature", () => {
 
     service = module.get<TelegramNestService>(TelegramNestService);
     jest.clearAllMocks();
+    competingTitles.mockReset().mockResolvedValue([]);
   });
 
   describe("dedicated series channel fallback", () => {
@@ -160,6 +129,40 @@ describe("TelegramNestService - Tag Feature", () => {
         invoke: jest.fn().mockResolvedValue(discovery([channel("Friends - HD")])),
         getMessages: jest.fn().mockResolvedValue([video("season 1 episode 2.mp4")]),
       };
+    });
+
+    it("excludes a spin-off channel and a spin-off upload in the original series channel", async () => {
+      competingTitles.mockResolvedValue(["Friends From College"]);
+      client.invoke.mockResolvedValue(discovery([channel("Friends From College"), channel("Friends", 456)]));
+      client.getMessages.mockResolvedValue([video("Friends.From.College.S01E02.mp4"), video("s01e02.mp4", 8)]);
+      const results = await service.searchMedia(client, "Friends", media, user);
+      expect(results.map((r) => r.messageId)).toEqual([8]);
+      expect(client.getMessages.mock.calls.every(([entity]: [Api.Channel]) => entity.title === "Friends")).toBe(true);
+    });
+
+    it("uses ambiguous releases only when a clear title cannot be found", async () => {
+      const file = { peer: { kind: "channel", id: "1", accessHash: "2" }, chatId: "1",
+        messageId: 9, fileName: "Friends.Fan.Edition.S01E02.mkv", fileSize: 1 };
+      (service as any).performGlobalSearch.mockResolvedValue([file]);
+      client.invoke.mockResolvedValue(discovery([]));
+      expect((await service.searchMedia(client, "Friends", media, user)).map((r) => r.messageId)).toEqual([9]);
+      (service as any).performGlobalSearch.mockResolvedValue([file, { ...file, messageId: 10, fileName: "Friends.S01E02.mkv" }]);
+      expect((await service.searchMedia(client, "Friends", media, user)).map((r) => r.messageId)).toEqual([10]);
+    });
+
+    it("hides cached ambiguous hits after an exact catalog tag is added", async () => {
+      const candidate = { peer: { kind: "chat", id: "1" }, chatId: "1", messageId: 9,
+        fileName: "Friends.Fan.Edition.S01E02.mkv", fileSize: 1, mimeType: "video/mp4" };
+      (service as any).performGlobalSearch.mockResolvedValue([candidate]);
+      client.invoke.mockResolvedValue(discovery([]));
+      const catalogId = media.imdbId + ":1:2";
+      expect(await service.searchMedia(client, "Friends", media, user, catalogId)).toEqual([
+        expect.objectContaining({ messageId: 9 }),
+      ]);
+      mockCacheService.getSearchResults.mockResolvedValue(mockCacheService.setSearchResults.mock.calls[0][2]);
+      (service as any).performGlobalSearch.mockResolvedValue([{ ...candidate, messageId: 10, customName: catalogId }]);
+      expect((await service.searchMedia(client, "Friends", media, user, catalogId)).map((r) => r.messageId)).toEqual([10]);
+      expect(mockCacheService.setSearchResults).toHaveBeenCalledTimes(1);
     });
 
     it("uses a matching unselected channel after normal results are rejected and caches metadata", async () => {
@@ -267,7 +270,7 @@ describe("TelegramNestService - Tag Feature", () => {
 
     it("skips all shortened-title queries when full-title search finds an exact episode", async () => {
       const details = {
-        ...media, title: "Example: A Journey", localizedTitle: "דוגמה: מסע",
+        ...media, title: "Example: A Journey", localizedTitle: "דוגמה: מסע", originalTitle: "Example: A Journey",
       };
       (service as any).performGlobalSearch.mockResolvedValue([{
         peer: { kind: "channel" as const, id: "123", accessHash: "456" }, chatId: "123", messageId: 1, fileName: "Example: A Journey S01E02.mp4", fileSize: 1024,
@@ -284,7 +287,7 @@ describe("TelegramNestService - Tag Feature", () => {
 
     it("waits for full-title filtering before trying shortened-title queries", async () => {
       const details = {
-        ...media, title: "Example: A Journey", localizedTitle: "דוגמה: מסע",
+        ...media, title: "Example: A Journey", localizedTitle: "דוגמה: מסע", originalTitle: "Example: A Journey",
       };
       let finishFullSearch: (results: unknown[]) => void = () => {};
       const fullSearch = new Promise<unknown[]>((resolve) => { finishFullSearch = resolve; });
@@ -324,7 +327,7 @@ describe("TelegramNestService - Tag Feature", () => {
       expect(results[0]).toMatchObject({ channelTitle: "גיבוי פירו 0.2", fileName });
       expect(client.getDialogs).not.toHaveBeenCalled();
       expect((service as any).performGlobalSearch).toHaveBeenCalledWith(
-        client, "Frieren s01e01", details, undefined,
+        client, "Frieren s01e01", details, undefined, "he", true,
       );
     });
 
@@ -348,6 +351,7 @@ describe("TelegramNestService - Tag Feature", () => {
 
     it.each([
       ["Tokyo.Revengers.S01E01.mkv", true],
+      ["Tokyo.Revengers.S1E1", true],
       ["Tokyo_Revengers_S01E01.mkv", true],
       ["Tokyo-Revengers S01E01.mkv", true],
       ["Tokyo.Revengers.S01E02.mkv", false],
@@ -355,16 +359,18 @@ describe("TelegramNestService - Tag Feature", () => {
       ["Tokyo.Revengers.S02E01.mkv", false],
       ["Other.Show.S01E01.mkv", false],
       ["Tokyo.RevengersExtra.S01E01.mkv", false],
-    ])("validates the title and exact episode in %s", (fileName, expected) => {
+    ])("validates the title and exact episode in %s", async (fileName, expected) => {
       const details = { ...media, title: "Tokyo Revengers", episodeInfo: { season: 1, episode: 1 } };
-      expect((service as any).checkTitleMatch({ fileName }, details, "הנוקמים מטוקיו")).toBe(expected);
+      const matcher = (service as any).createEpisodeMatcher(details, "הנוקמים מטוקיו", "he");
+      expect(await matcher.match({ fileName })).toBe(expected ? "clear" : "none");
     });
 
-    it("rejects the provided Frieren episode 2 release when episode 1 is requested", () => {
+    it("rejects the provided Frieren episode 2 release when episode 1 is requested", async () => {
       const details = { ...media, title: "Frieren: Beyond Journey's End", episodeInfo: { season: 1, episode: 1 } };
-      expect((service as any).checkTitleMatch({
+      const matcher = (service as any).createEpisodeMatcher(details, "פרירן", "he");
+      expect(await matcher.match({
         fileName: "Frieren.Beyond.Journeys.End.S01E02.It.Didnt.Have.to..mkv",
-      }, details, "פרירן")).toBe(false);
+      })).toBe("none");
     });
 
     it("deduplicates and caps fallback results at the series limit", async () => {
@@ -623,7 +629,7 @@ describe("TelegramNestService - Tag Feature", () => {
     ])("refreshes additions, edits and removals for %s (%s) while reusing ordinary results", async (type, catalogId) => {
       const media: any = { title: "Movie", type, year: 2026,
         episodeInfo: type === "series" ? { season: 1, episode: 2 } : null };
-      const limit = type === "movie" ? 10 : 20;
+      const limit = 20;
       const ordinary = Array.from({ length: limit }, (_, i) => ({
         peer, chatId: peer.id, messageId: i + 1,
         fileName: `Movie s01e02 ${i}.mp4`, fileSize: 1000, mimeType: "video/mp4",
@@ -701,8 +707,8 @@ describe("TelegramNestService - Tag Feature", () => {
     });
     const matches = (result: MediaSearchResult, details = media) =>
       (service as unknown as {
-        checkTitleMatch(result: MediaSearchResult, media: MediaDetails, title: string): boolean;
-      }).checkTitleMatch(result, details, details.localizedTitle || details.title);
+        matchesMovieTitle(result: MediaSearchResult, media: MediaDetails, title: string): boolean;
+      }).matchesMovieTitle(result, details, details.localizedTitle || details.title);
 
     afterEach(() => {
       jest.restoreAllMocks();
@@ -754,15 +760,16 @@ describe("TelegramNestService - Tag Feature", () => {
       expect(matches(video(1, fileName), { ...media, title, localizedTitle: null })).toBe(expected);
     });
 
-    it("does not apply the relaxed movie matcher to series episodes", () => {
-      expect(matches(video(1, "Harry Potter 4 and the Goblet of Fire s01e01.mkv"), {
+    it("does not apply the relaxed movie matcher to series episodes", async () => {
+      const matcher = (service as any).createEpisodeMatcher({
         ...media, type: "series", episodeInfo: { season: 1, episode: 1 },
-      })).toBe(false);
+      }, media.localizedTitle, "he");
+      expect(await matcher.match(video(1, "Harry Potter 4 and the Goblet of Fire s01e01.mkv"))).toBe("none");
     });
 
-    it("includes both real dubbed releases among ten sources without a tag", async () => {
-      const subtitled = Array.from({ length: 10 }, (_, i) => ({
-        ...video(i + 1, `הארי פוטר וגביע האש 2005 תרגום מובנה ${i}.mkv`), hasSubtitles: true,
+    it("includes both real dubbed releases among twenty sources without a tag", async () => {
+      const subtitled = Array.from({ length: 24 }, (_, i) => ({
+        ...video(100 + i, `הארי פוטר וגביע האש 2005 תרגום מובנה ${i}.mkv`), hasSubtitles: true,
       }));
       const dubbed = [
         { ...video(20, "הארי פוטר 4 וגביע האש מדובב 2005 1080p.mkv"), isDubbed: true },
@@ -779,10 +786,10 @@ describe("TelegramNestService - Tag Feature", () => {
         media.localizedTitle || media.title, media,
         { id: 1, token: "movie-matching-test", language: "he" } as InstanceProfile, media.imdbId);
 
-      expect(results).toHaveLength(10);
+      expect(results).toHaveLength(20);
       expect(results.filter((result) => result.isDubbed).map((result) => result.messageId)).toEqual([20, 21]);
       expect(results.every((result) => !result.customName)).toBe(true);
-      expect(new Set(results.map((result) => result.messageId)).size).toBe(10);
+      expect(new Set(results.map((result) => result.messageId)).size).toBe(20);
     });
   });
 
@@ -813,6 +820,137 @@ describe("TelegramNestService - Tag Feature", () => {
     function searchResponse(messages: Api.Message[], chats: Api.TypeChat[]) {
       return new Api.messages.Messages({ messages, chats, users: [], topics: [] });
     }
+
+    function release(id: number, fileName: string, caption = "") {
+      return fixture(Api.Message.prototype, {
+        id, peerId: channelPeer, message: caption, media: new Api.MessageMediaDocument({
+          document: fixture(Api.Document.prototype, {
+            mimeType: "video/mp4", size: bigInt(1024), date: 1700000000,
+            attributes: [new Api.DocumentAttributeFilename({ fileName })],
+          }),
+        }),
+      });
+    }
+
+    function searchClient(messages: Api.Message[]) {
+      return {
+        connected: true,
+        getInputEntity: jest.fn(async (peer: Api.PeerChannel) =>
+          new Api.InputPeerChannel({ channelId: peer.channelId, accessHash: bigInt(456) })),
+        invoke: jest.fn(async ({ q }: { q: string }) =>
+          searchResponse(q.startsWith("/tag ") ? [] : messages, [channel])),
+      } as unknown as TelegramClient;
+    }
+
+    function streamsFor(details: MediaDetails, messages: Api.Message[]) {
+      mockCacheService.getSearchResults.mockResolvedValue(null);
+      mockClientManager.getOrInitializeClient.mockResolvedValue(searchClient(messages));
+      const tmdb = { getSeriesDetails: async () => details, getMovieDetails: async () => details };
+      const handler = Reflect.construct(StreamHandlerService, [tmdb, service, mockCacheService, {}]);
+      const controller: StreamController = Reflect.construct(StreamController, [
+        handler, service, mockConfigService, {}, mockCacheService,
+        { getConfig: () => ({ publicUrl: "https://stream.test" }) },
+      ]);
+      const id = details.episodeInfo ? details.imdbId + ":1:5" : details.imdbId;
+      return controller.getStream({ user: { token: "fixture", language: "he" } } as Request, details.type, id);
+    }
+
+    it.each([true, false])("always searches videos and documents for S1E10 (general search has a dub: %s)", async (hasDub) => {
+      const media: MediaDetails = { id: 12609, imdbId: "tt0088509", title: "Dragon Ball",
+        localizedTitle: "דרגון בול", type: "series", episodeInfo: { season: 1, episode: 10 } };
+      const title = "דרגון בול עונה 1 פרק 10";
+      const episode = release(56, "דרגון_בול_מתורגם_לעברית_פרק_10_1_דרגון_בול_מתורגם_לעברית_פרק_10.mp4",
+        "דרגון בול • עונה 1 פרק 10");
+      const archiveCopy = fixture(Api.Message.prototype, { ...episode, id: 127608, peerId: otherPeer });
+      const seriesChannel = fixture(Api.Channel.prototype, { ...channel, title: "דרגון בול מתורגם לעברית‼" });
+      const spinOff = release(57, "Dragon.Ball.Super.S01E10.mp4");
+      const document = release(58, "Dragon.Ball.S01E10.mkv");
+      const dub = release(59, "Dragon.Ball.S01E10.HebDub.mp4");
+      const client = searchClient([]);
+      const filtersByQuery = new Map<string, string[]>();
+      jest.mocked(client.invoke).mockImplementation(async (request) => {
+        if (!(request instanceof Api.messages.SearchGlobal)) throw Error("Unexpected request");
+        const filters = filtersByQuery.get(request.q) || [];
+        filters.push(request.filter.className);
+        filtersByQuery.set(request.q, filters);
+        if (request.filter instanceof Api.InputMessagesFilterVideo) {
+          return searchResponse(request.q === title ? [archiveCopy, episode, spinOff] : [], [otherChannel, seriesChannel]);
+        }
+        if (request.filter instanceof Api.InputMessagesFilterDocument) {
+          return searchResponse(request.q === "Dragon Ball s01e10" ? [document] : [], [channel]);
+        }
+        if (!hasDub && request.q === title) {
+          return new Api.messages.MessagesSlice({ messages: [spinOff], topics: [], chats: [channel], users: [], count: 278 });
+        }
+        return searchResponse(hasDub && request.q === title ? [dub] : [], [seriesChannel]);
+      });
+      mockCacheService.getSearchResults.mockResolvedValue(null);
+      competingTitles.mockResolvedValue(["Dragon Ball Super"]);
+      const results = await service.searchMedia(client, "דרגון בול", media,
+        { token: "fixture", language: "he" } as InstanceProfile, "tt0088509:1:10");
+      expect(results.map((r) => r.messageId)).toEqual(hasDub ? [56, 59, 58] : [56, 58]);
+      expect(results[0].channelTitle).toBe(seriesChannel.title);
+      expect(results[0].hasSubtitles).toBe(true);
+      if (hasDub) expect(results[1].isDubbed).toBe(true);
+      for (const query of [title, "דרגון בול ע1 פ10", "דרגון בול ע01 פ10", "Dragon Ball s01e10", "Dragon Ball s1e10"]) {
+        expect(filtersByQuery.get(query)).toEqual(["InputMessagesFilterVideo", "InputMessagesFilterDocument", "InputMessagesFilterEmpty"]);
+      }
+      expect(filtersByQuery.get("דרגון בול")).toEqual(["InputMessagesFilterEmpty"]);
+      expect(filtersByQuery.get("/tag tt0088509:1:10")).toEqual(["InputMessagesFilterEmpty"]);
+    });
+
+    it("surfaces message 51 for tt0088509:1:5 and keeps spin-offs with their own series", async () => {
+      const media: MediaDetails = { id: 12609, imdbId: "tt0088509", title: "Dragon Ball",
+        localizedTitle: "דרגון בול", type: "series", episodeInfo: { season: 1, episode: 5 } };
+      const spinOffs = ["דרגון בול זי", "דרגון בול סופר", "דרגון בול קאי", "דרגון בול ג'י-טי", "דרגון בול דאימה"];
+      const messages = spinOffs.map((title, i) => release(i + 1, title + "_מדובב_עונה_1_פרק_5.mp4"));
+      messages.push(release(51, "דרגון_בול_מתורגם_לעברית_פרק_5_1_דרגון_בול_מתורגם_לעברית_פרק_5_1.mp4",
+        "דרגון בול • עונה 1 פרק 5"), release(52, "Dragon.Ball.S01E05.mkv"),
+        release(53, "דרגון_בול_ע1פ5.mp4"), release(54, "video.mp4", "דרגון בול\nעונה 1 פרק 5 מדובב"),
+        release(55, "דרגון_בול_ע1פ6.mp4"));
+      competingTitles.mockResolvedValue(spinOffs);
+      const { streams } = await streamsFor(media, messages);
+      expect(streams.slice(0, -1).map((s) => s.url.split("/").pop())).toEqual(["51", "54", "53", "52"]);
+      expect(streams[0].name).toContain("תרגום מובנה");
+      expect(streams[2].name).toBe("StreamGram");
+      expect(competingTitles).toHaveBeenCalledTimes(1);
+
+      competingTitles.mockResolvedValue(["Dragon Ball", "דרגון בול"]);
+      const supers = await streamsFor({ ...media, id: 62715, imdbId: "tt4644488",
+        title: "Dragon Ball Super", localizedTitle: "דרגון בול סופר" }, messages);
+      expect(supers.streams.slice(0, -1).map((s) => s.url.split("/").pop())).toEqual(["2"]);
+    });
+
+    it.each(["movie", "series"] as const)("displays twenty distinct %s sources followed by the tag instructions", async (type) => {
+      const media: MediaDetails = { id: 1, imdbId: "tt1234567", type, title: "Example",
+        episodeInfo: type === "series" ? { season: 1, episode: 5 } : null };
+      const releases = Array.from({ length: 25 }, (_, i) => release(i + 1, "Example.S01E05." + i + ".mkv"));
+      const { streams } = await streamsFor(media, [...releases, ...releases]);
+      expect(streams).toHaveLength(21);
+      expect(new Set(streams.slice(0, 20).map((s) => s.url)).size).toBe(20);
+      expect(streams[20].url).toContain("/tag/");
+    });
+
+    it("uses each account's episode terms and subtitle indicators during concurrent searches", async () => {
+      mockCacheService.getSearchResults.mockResolvedValue(null);
+      const cases = [
+        ["en", "Example", "season 1 episode 5", "eng_sub"],
+        ["he", "דוגמה", "עונה 1 פרק 5", "מתורגם_לעברית"],
+        ["ru", "Пример", "сезон 1 серия 5", "русские_субтитры"],
+        ["ar", "مثال", "الموسم 1 الحلقة 5", "ترجمة_مدمجة"],
+        ["es", "Ejemplo", "temporada 1 capítulo 5", "sub_español"],
+      ] as const;
+      const results = await Promise.all(cases.map(([language, title, marker, sub]) => {
+        const details: MediaDetails = { id: 1, imdbId: "tt1234567", type: "series", title: "Example",
+          localizedTitle: title, episodeInfo: { season: 1, episode: 5 } };
+        return service.searchMedia(searchClient([release(1, "Example.S01E05.mkv"), release(2, title + " " + marker + "." + sub + ".mkv")]),
+          title, details, { token: language, language } as InstanceProfile);
+      }));
+      for (const files of results) {
+        expect(files.map((r) => r.messageId)).toEqual([2, 1]);
+        expect(files[0].hasSubtitles).toBe(true);
+      }
+    });
 
     it.each([false, true])("keeps a forwarded Saved Messages video from global search (tagged: %s)", async (tagged) => {
       const selfPeer = new Api.PeerUser({ userId: bigInt(999) });
@@ -1099,7 +1237,7 @@ describe("TelegramNestService - Tag Feature", () => {
   describe("Tag Query Generation", () => {
     it.each(["movie", "series"])(
       "searches the name before a hyphen subtitle for %s without losing episode/year suffixes",
-      (type) => {
+      async (type) => {
         const media = {
           title: "Re:ZERO -Starting Life in Another World-",
           type, year: 2016,
@@ -1122,15 +1260,10 @@ describe("TelegramNestService - Tag Feature", () => {
           expect(fallback).toContain("Re ZERO s01e01");
           expect(fallback).not.toContain("Re s01e01");
           expect(fallback).not.toContain("רי");
-          expect((service as any).checkTitleMatch(
-            { fileName: "Re.ZERO.S01E01.mp4" }, media, localized,
-          )).toBe(true);
-          expect((service as any).checkTitleMatch(
-            { fileName: "Re.Other.S01E01.mp4" }, media, localized,
-          )).toBe(false);
-          expect((service as any).checkTitleMatch(
-            { fileName: "Re.ZERO.S01E02.mp4" }, media, localized,
-          )).toBe(false);
+          const matcher = (service as any).createEpisodeMatcher(media, localized, "he");
+          expect(await matcher.match({ fileName: "Re.ZERO.S01E01.mp4" })).toBe("ambiguous");
+          expect(await matcher.match({ fileName: "Re.Other.S01E01.mp4" })).toBe("none");
+          expect(await matcher.match({ fileName: "Re.ZERO.S01E02.mp4" })).toBe("none");
         }
         expect((service as any).prepareSearchTitle("Spider-Man - No Way Home"))
           .toBe("Spider-Man");

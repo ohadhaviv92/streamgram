@@ -1,4 +1,5 @@
 import configuration from "../config/configuration";
+import { matchMediaIndicators } from "./search-text";
 import { MediaDetails } from "../modules/tmdb/types";
 import { MediaSearchResult } from "../modules/telegram/types";
 import { SearchResponsePayload } from "../modules/stream/types";
@@ -82,30 +83,7 @@ export function detectSubtitlesAndDubbing(text?: string | null): {
   hasSubtitles: boolean;
   isDubbed: boolean;
 } {
-  if (!text) {
-    return { hasSubtitles: false, isDubbed: false };
-  }
-
-  const languages = config.language.languages;
-  const lower = text.toLowerCase();
-
-  let hasSubtitles = false;
-  let isDubbed = false;
-
-  for (const lang of Object.values(languages)) {
-    if (!hasSubtitles) {
-      hasSubtitles = (lang as any).subtitleIndicators.some(
-        (indicator: string) => lower.includes(indicator.toLowerCase()),
-      );
-    }
-    if (!isDubbed) {
-      isDubbed = (lang as any).dubbedIndicators.some((indicator: string) =>
-        lower.includes(indicator.toLowerCase()),
-      );
-    }
-  }
-
-  return { hasSubtitles, isDubbed };
+  return matchMediaIndicators(text || "", Object.values(config.language.languages));
 }
 
 /**

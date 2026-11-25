@@ -38,8 +38,8 @@ export default () => ({
         tmdbCode: "en",
         seasonTerms: { long: ["season"], short: ["s"] },
         episodeTerms: { long: ["episode"], short: ["e"] },
-        subtitleIndicators: ["hebsub"],
-        dubbedIndicators: ["hebdub"],
+        subtitleIndicators: ["engsub", "english subtitles", "eng sub"],
+        dubbedIndicators: ["engdub", "english dub", "eng dub"],
         subtitleLabel: "Built-in Subtitles",
         dubbedLabel: "Dubbed",
         howToTagLabel: "Help find this file",
@@ -51,8 +51,8 @@ export default () => ({
         tmdbCode: "he",
         seasonTerms: { long: ["עונה"], short: ["ע"] },
         episodeTerms: { long: ["פרק"], short: ["פ"] },
-        subtitleIndicators: ["ת.מ", "תרגום מובנה"],
-        dubbedIndicators: ["מדובב"],
+        subtitleIndicators: ["ת.מ", "תרגום מובנה", "מתורגם לעברית", "hebsub", "heb sub"],
+        dubbedIndicators: ["מדובב", "hebdub", "heb dub"],
         subtitleLabel: "תרגום מובנה",
         dubbedLabel: "מדובב",
         howToTagLabel: "עזרה במציאת הקובץ",
@@ -102,7 +102,7 @@ export default () => ({
   },
   searchResults: {
     movie: {
-      totalResults: 10,
+      totalResults: 20,
     },
     series: {
       totalResults: 20,
