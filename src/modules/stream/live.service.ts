@@ -13,7 +13,7 @@ export type LiveState = "live" | "offline" | "scheduled" | "unsupported" | "unav
 export type LiveItemType = "tv" | "movie";
 export interface LiveChannelStatus { channelId: string; title: string; state: LiveState; scheduledAt?: number }
 interface Broadcast extends LiveChannelStatus { call?: Api.InputGroupCall; dcId?: number }
-interface Segment { sequence: number; epoch: number; media: Buffer }
+interface Segment { sequence: number; epoch: number; media: Buffer; expiresAt?: number }
 interface LiveSession {
   id: string;
   user: InstanceProfile;
@@ -26,6 +26,31 @@ interface LiveSession {
   resolve: () => void;
   reject: (error: Error) => void;
   runner?: Promise<void>;
+}
+
+const PLAYLIST_SEGMENTS = 12;
+// RFC 8216 section 6.2.2: retain removed media for a full playlist plus
+// its own duration, including the initialization map it still references.
+const RETIRED_SEGMENT_MS = (PLAYLIST_SEGMENTS + 1) * 1000;
+const MAX_BUFFERED_SEGMENTS = 48;
+const MAX_BUFFERED_BYTES = 48 * 1024 * 1024;
+
+/** A stuck media-DC read must not hold a receiver/client after viewers leave.
+ * This cancels our wait, not the shared Telegram transport or other viewers.
+ */
+function waitForLiveRequest<T>(request: Promise<T> | undefined, signal?: AbortSignal, timeoutMs = 10_000): Promise<T | undefined> {
+  return new Promise((resolve, reject) => {
+    const finish = (error?: Error, value?: T) => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", abort);
+      if (error) reject(error); else resolve(value);
+    };
+    const abort = () => finish(new Error("Live request stopped"));
+    const timer = setTimeout(() => finish(new Error("Live request timed out")), timeoutMs);
+    signal?.addEventListener("abort", abort, { once: true });
+    Promise.resolve(request).then(value => finish(undefined, value), error => { clearTimeout(timer); signal?.removeEventListener("abort", abort); reject(error); });
+    if (signal?.aborted) abort();
+  });
 }
 
 const labels: Record<SupportedLanguage, Record<LiveState, string>> = {
@@ -62,6 +87,7 @@ export class LiveService implements OnApplicationShutdown {
     this.cleanup = setInterval(() => {
       for (const session of this.sessions.values()) {
         if (Date.now() - session.touchedAt >= 30_000) this.stop(session);
+        else this.pruneSegments(session);
       }
     }, 1000);
     this.cleanup.unref();
@@ -213,7 +239,8 @@ export class LiveService implements OnApplicationShutdown {
     await session.ready;
     this.assertSelected(user, channelId);
     if (session.abort.signal.aborted) throw new ServiceUnavailableException("Live playback has ended");
-    const segments = [...session.segments];
+    this.pruneSegments(session);
+    const segments = session.segments.filter(segment => segment.expiresAt === undefined);
     const lines = ["#EXTM3U", "#EXT-X-VERSION:7", "#EXT-X-TARGETDURATION:1", `#EXT-X-MEDIA-SEQUENCE:${segments[0].sequence}`,
       `#EXT-X-DISCONTINUITY-SEQUENCE:${segments[0].epoch}`];
     let epoch: number | undefined;
@@ -232,6 +259,7 @@ export class LiveService implements OnApplicationShutdown {
     this.assertSelected(user, channelId);
     const session = this.sessions.get(this.key(user, channelId));
     if (!session || session.id !== sessionId || session.abort.signal.aborted) throw new NotFoundException("Live segment expired");
+    this.pruneSegments(session);
     let data: Buffer | undefined;
     const init = /^init-(\d+)\.mp4$/.exec(filename);
     const segment = /^segment-(\d+)\.m4s$/.exec(filename);
@@ -240,6 +268,14 @@ export class LiveService implements OnApplicationShutdown {
     if (!data) throw new NotFoundException("Live segment expired");
     session.touchedAt = Date.now();
     return data;
+  }
+
+  private pruneSegments(session: LiveSession) {
+    const now = Date.now();
+    session.segments = session.segments.filter(segment => segment.expiresAt === undefined || segment.expiresAt > now);
+    for (const id of session.inits.keys()) {
+      if (!session.segments.some(segment => segment.epoch === id)) session.inits.delete(id);
+    }
   }
 
   private stop(session: LiveSession) {
@@ -253,24 +289,44 @@ export class LiveService implements OnApplicationShutdown {
   private async receive(session: LiveSession): Promise<void> {
     const { user, channelId, abort } = session;
     let release: (() => void) | undefined;
+    let releaseMedia: (() => void) | undefined;
     let detach: (() => void) | undefined;
     let client: TelegramClient | undefined;
     let call: Api.InputGroupCall | undefined;
     let source: number | undefined;
     let joined = false;
     const key = this.key(user, channelId);
+    const check = () => { if (abort.signal.aborted) throw new Error("Playback stopped"); this.assertSelected(user, channelId); };
     try {
       client = await this.manager.getOrInitializeClient(user.token, user.session_string);
+      check();
       release = this.manager.retainClient(client);
       detach = client.onDisconnect(() => this.stop(session));
-      const broadcast = await this.inspect(client, channelId);
-      if (broadcast.state !== "live" || !broadcast.call || !broadcast.dcId) throw new Error("Broadcast not live");
+      const broadcast = await waitForLiveRequest(this.inspect(client, channelId), abort.signal);
+      check();
+      if (!broadcast || broadcast.state !== "live" || !broadcast.call || !broadcast.dcId) throw new Error("Broadcast not live");
       call = broadcast.call;
       const activeClient = client;
       const activeCall = call;
+      const mediaDcId = broadcast.dcId;
       if (this.unsupported.get(key) === call.id.toString()) throw new UnsupportedLiveMediaError();
-      const sender = await client.getSender(broadcast.dcId);
-      const check = () => { if (abort.signal.aborted) throw new Error("Playback stopped"); this.assertSelected(user, channelId); };
+      // getSender alone leaves teleproto's media slot "idle"; its 60-second
+      // timer can disconnect it between chunk requests despite retainClient.
+      // Hold a separate lease on this managed client's media DC for playback.
+      const acquireSender = async () => {
+        releaseMedia?.();
+        releaseMedia = undefined;
+        const pending = activeClient._leaseSender(mediaDcId).then(lease => {
+          if (abort.signal.aborted) { lease.release(); throw new Error("Playback stopped"); }
+          releaseMedia = lease.release;
+          return lease.sender;
+        });
+        const sender = await waitForLiveRequest(pending, abort.signal);
+        check();
+        if (!sender) throw new Error("Live media DC unavailable");
+        return sender;
+      };
+      let sender = await acquireSender();
       const join = async () => {
         check();
         source = randomInt(1, 0x7fffffff);
@@ -294,17 +350,26 @@ export class LiveService implements OnApplicationShutdown {
       let resyncs = 0;
       while (!abort.signal.aborted) {
         check();
-        if (Date.now() - lastProgress > 15_000) throw new Error("Live publisher stalled");
+        this.pruneSegments(session);
+        // Pause a burst of catch-up downloads rather than evicting media that
+        // was already promised to a viewer. Reserve room for the next 1 MiB part.
+        if (session.segments.length >= MAX_BUFFERED_SEGMENTS ||
+            session.segments.reduce((size, segment) => size + segment.media.length, 0) >= MAX_BUFFERED_BYTES - 2 * 1024 * 1024) {
+          await delay(100, undefined, { signal: abort.signal });
+          lastProgress = Date.now();
+          continue;
+        }
         try {
+          if (Date.now() - lastProgress > 15_000) throw new Error("Live publisher stalled");
           if (!timeMs) {
-            const channels = await sender.send(new Api.phone.GetGroupCallStreamChannels({ call }));
+            const channels = await waitForLiveRequest(sender.send(new Api.phone.GetGroupCallStreamChannels({ call })), abort.signal);
             check();
             if (!(channels instanceof Api.phone.GroupCallStreamChannels)) throw new Error("Invalid stream channels");
             const video = channels.channels.find(channel => channel.channel === 1 && channel.scale === 0);
             timeMs = video ? Math.floor(Number(video.lastTimestampMs.toString()) / 1000) * 1000 - 2000 : 0;
             if (timeMs <= 0) { timeMs = 0; await delay(1000, undefined, { signal: abort.signal }); continue; }
           }
-          const part = await sender.send(new Api.upload.GetFile({ location: new Api.InputGroupCallStream({ call, timeMs: bigInt(timeMs), scale: 0, videoChannel: 1, videoQuality: 2 }), offset: bigInt(0), limit: 1024 * 1024 }));
+          const part = await waitForLiveRequest(sender.send(new Api.upload.GetFile({ location: new Api.InputGroupCallStream({ call, timeMs: bigInt(timeMs), scale: 0, videoChannel: 1, videoQuality: 2 }), offset: bigInt(0), limit: 1024 * 1024 })), abort.signal);
           check();
           if (!(part instanceof Api.upload.File)) throw new Error("Live resynchronization required");
           const remuxed = remuxLivePart(Buffer.from(part.bytes), sequence);
@@ -315,28 +380,40 @@ export class LiveService implements OnApplicationShutdown {
           needsKeyframe = false;
           session.inits.set(epoch, remuxed.init);
           session.segments.push({ sequence: sequence++, epoch, media: remuxed.media });
-          // Twelve one-second segments, capped again by byte size.
-          while (session.segments.length > 12 || session.segments.reduce((size, segment) => size + segment.media.length, 0) > 12 * 1024 * 1024) session.segments.shift();
-          for (const id of session.inits.keys()) if (!session.segments.some(segment => segment.epoch === id)) session.inits.delete(id);
-          if (session.segments.length >= 3) session.resolve();
+          const active = session.segments.filter(segment => segment.expiresAt === undefined);
+          let activeBytes = active.reduce((size, segment) => size + segment.media.length, 0);
+          while (active.length > PLAYLIST_SEGMENTS || activeBytes > 12 * 1024 * 1024) {
+            const retired = active.shift();
+            if (!retired) break;
+            retired.expiresAt = Date.now() + RETIRED_SEGMENT_MS;
+            activeBytes -= retired.media.length;
+          }
+          this.pruneSegments(session);
+          if (active.length >= 3) session.resolve();
           lastProgress = Date.now();
           resyncs = 0;
         } catch (error) {
           if (abort.signal.aborted || error instanceof UnsupportedLiveMediaError) throw error;
           const code = (error as { errorMessage?: string }).errorMessage || "";
           if (code === "TIME_TOO_BIG" || /^FLOOD_WAIT(?:_\d+)?$/.test(code)) { await delay(100, undefined, { signal: abort.signal }); continue; }
+          const reason = /^[A-Z][A-Z0-9_]{0,63}$/.test(code) ? code : error instanceof Error ? error.constructor.name : "Error";
+          logger.warn({ reason, attempt: resyncs + 1 }, "Telegram live playback resynchronizing");
           if (++resyncs > 3) throw new Error("Live resynchronization failed");
           // Recheck full channel details only when Telegram reports a call
           // error, rather than interrupting healthy playback with polling.
           if (code.startsWith("GROUPCALL_")) {
-            const current = await this.inspect(client, channelId);
+            const current = await waitForLiveRequest(this.inspect(client, channelId), abort.signal);
             check();
-            if (current.state !== "live" || current.call?.id.toString() !== call.id.toString() || current.dcId !== broadcast.dcId) throw new Error("Broadcast changed");
+            if (!current || current.state !== "live" || current.call?.id.toString() !== call.id.toString() || current.dcId !== broadcast.dcId) throw new Error("Broadcast changed");
           }
           if (code === "GROUPCALL_JOIN_MISSING" || code === "GROUPCALL_FORBIDDEN") await join();
+          sender = await acquireSender();
           timeMs = 0;
           epoch++;
           needsKeyframe = true;
+          // Give each bounded recovery attempt its own progress window. A
+          // previous timeout must not immediately kill the next attempt.
+          lastProgress = Date.now();
           await delay(1000, undefined, { signal: abort.signal });
         }
       }
@@ -344,15 +421,21 @@ export class LiveService implements OnApplicationShutdown {
       if (!abort.signal.aborted) {
         if (error instanceof UnsupportedLiveMediaError && call) this.unsupported.set(key, call.id.toString());
         // Do not log raw RPC errors, call hashes, tokens or media bytes.
-        logger.warn({ errorName: error instanceof Error ? error.constructor.name : "Error" }, "Telegram live playback stopped");
+        const rpcCode = (error as { errorMessage?: string }).errorMessage || "";
+        const message = error instanceof Error ? error.message : "";
+        const reason = error instanceof UnsupportedLiveMediaError ? "unsupported_media"
+          : /^[A-Z][A-Z0-9_]{0,63}$/.test(rpcCode) ? rpcCode
+            : ["Broadcast not live", "Broadcast changed", "Live publisher stalled", "Live resynchronization failed", "Live request timed out"].includes(message) ? message : "unavailable";
+        logger.warn({ errorName: error instanceof Error ? error.constructor.name : "Error", reason }, "Telegram live playback stopped");
       }
     } finally {
       this.stop(session);
       this.statuses.delete(key);
       detach?.();
       if (joined && client?.connected && call && source !== undefined) {
-        try { await client.invoke(new Api.phone.LeaveGroupCall({ call, source })); } catch { /* The call or client may already be gone. */ }
+        try { await waitForLiveRequest(client.invoke(new Api.phone.LeaveGroupCall({ call, source })), undefined, 5000); } catch { /* The call or client may already be gone. */ }
       }
+      releaseMedia?.();
       release?.();
     }
   }
