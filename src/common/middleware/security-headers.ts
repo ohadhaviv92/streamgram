@@ -10,7 +10,7 @@ export function securityHeaders(request: Request, response: Response, next: Next
     "frame-ancestors 'none'", "base-uri 'self'", "form-action 'self'", "object-src 'none'",
     ...(dashboard ? ["script-src 'self'"] : []),
   ].join("; "));
-  if (dashboard || /^\/(admin|auth|setup|settings|name|folders|channels|telegram-status|invitations|cache)(\/|$)/.test(request.path)) {
+  if (dashboard || /^\/(admin|auth|setup|settings|name|folders|channels|live-channels|telegram-status|invitations|cache)(\/|$)/.test(request.path)) {
     response.setHeader("Cache-Control", "no-store");
   }
   next();

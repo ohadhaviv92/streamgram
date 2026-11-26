@@ -1,5 +1,9 @@
 import { ru, ar, es } from "./translations.js";
 const he = {
+  "Live TV channels": "ערוצי טלוויזיה בשידור חי",
+  "Search live channels": "חיפוש ערוצים חיים",
+  "Select channels for native Telegram live broadcasts in Stremio and Nuvio. Offline channels stay visible. Playback supports H.264/AAC RTMP broadcasts.": "בחרו ערוצים לשידורים חיים מטלגרם ב־Stremio וב־Nuvio. ערוצים שאינם משדרים יישארו גלויים. הניגון תומך בשידורי RTMP עם וידאו H.264 ואודיו AAC.",
+
   "HTTPS for Stremio": "HTTPS לסטרימיו",
   "Skipped": "דולגה",
   "Nuvio supports HTTP; HTTPS is required for Stremio. Use a server URL your playback device can reach.": "Nuvio תומך ב־HTTP; סטרימיו דורש HTTPS. השתמשו בכתובת שרת שנגישה ממכשיר הצפייה שלכם.",

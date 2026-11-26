@@ -60,19 +60,21 @@ export async function personal(token) {
     });
   };
   const states = {
-    folders: { loaded: false, items: [], selected: new Set() },
-    channels: { loaded: false, items: [], selected: new Set() },
+    folders: { loaded: false, dirty: false, items: [], selected: new Set() },
+    channels: { loaded: false, dirty: false, items: [], selected: new Set() },
+    liveChannels: { loaded: false, dirty: false, items: [], selected: new Set() },
   };
   $("#save-sources").disabled = true;
   function renderList(type) {
     const state = states[type],
       root = $(`#${type}-list`),
       query =
-        type === "channels" ? $("#channel-search").value.toLowerCase() : "";
+        type === "channels" ? $("#channel-search").value.toLowerCase()
+          : type === "liveChannels" ? $("#live-channel-search").value.toLowerCase() : "";
     const items = state.items.filter(
       (i) =>
         !query ||
-        `${i.title} ${i.username || ""}`.toLowerCase().includes(query),
+        `${i.title} ${i.username || ""} ${i.id}`.toLowerCase().includes(query),
     );
     root.replaceChildren();
     if (!items.length) {
@@ -85,12 +87,17 @@ export async function personal(token) {
       const input = document.createElement("input");
       input.type = "checkbox";
       input.checked = state.selected.has(String(item.id));
-      input.onchange = () =>
+      input.onchange = () => {
         input.checked
           ? state.selected.add(String(item.id))
           : state.selected.delete(String(item.id));
+        state.dirty = true;
+      };
       const text = document.createElement("span");
-      text.textContent = item.title || String(item.id);
+      const title = item.title || String(item.id);
+      text.textContent = type === "liveChannels"
+        ? `${title} · ${item.username ? `@${item.username}` : item.id}`
+        : title;
       label.append(input, text);
       root.append(label);
     });
@@ -99,16 +106,16 @@ export async function personal(token) {
     run($("#load-sources"), async () => {
       if (!$("#folders-list"))
         $("#source-lists").innerHTML =
-          `<section><h3 class="section-label">${t("Folders")}</h3><div id="folders-list" class="sources"></div></section><section><h3 class="section-label">${t("Channels")}</h3><label class="sr-only" for="channel-search">${t("Search channels")}</label><input id="channel-search" type="search" placeholder="${t("Search channels")}"><div id="channels-list" class="sources"></div></section>`;
+          `<section><h3 class="section-label">${t("Folders")}</h3><div id="folders-list" class="sources"></div></section><section><h3 class="section-label">${t("Channels")}</h3><label class="sr-only" for="channel-search">${t("Search channels")}</label><input id="channel-search" type="search" placeholder="${t("Search channels")}"><div id="channels-list" class="sources"></div></section><section><h3 class="section-label">${t("Live TV channels")}</h3><p class="hint">${t("Select channels for native Telegram live broadcasts in Stremio and Nuvio. Offline channels stay visible. Playback supports H.264/AAC RTMP broadcasts.")}</p><label class="sr-only" for="live-channel-search">${t("Search live channels")}</label><input id="live-channel-search" type="search" placeholder="${t("Search live channels")}"><div id="liveChannels-list" class="sources"></div></section>`;
       const results = await Promise.allSettled(
-        ["folders", "channels"].map((type) => api(`/${type}`, { token })),
+        ["folders", "channels", "live-channels"].map((type) => api(`/${type}`, { token })),
       );
       results.forEach((result, i) => {
-        const type = i ? "channels" : "folders",
+        const type = ["folders", "channels", "liveChannels"][i],
           state = states[type];
         if (result.status === "fulfilled") {
-          state.items = result.value[type];
-          if (!state.loaded) {
+          state.items = result.value[type === "liveChannels" ? "channels" : type];
+          if (!state.loaded || !state.dirty) {
             state.selected = new Set(
               state.items.filter((v) => v.isSelected).map((v) => String(v.id)),
             );
@@ -121,6 +128,7 @@ export async function personal(token) {
           );
       });
       $("#channel-search").oninput = () => renderList("channels");
+      $("#live-channel-search").oninput = () => renderList("liveChannels");
       $("#save-sources").disabled = !Object.values(states).some(
         (s) => s.loaded,
       );
@@ -134,17 +142,19 @@ export async function personal(token) {
     run($("#save-sources"), async () => {
       const results = await Promise.allSettled(
         Object.entries(states)
-          .filter(([, state]) => state.loaded)
-          .map(([type, state]) =>
-            api(`/${type}`, {
+          .filter(([, state]) => state.loaded && state.dirty)
+          .map(async ([type, state]) => {
+            const selected = [...state.selected];
+            await api(`/${type === "liveChannels" ? "live-channels" : type}`, {
               method: "POST",
               token,
               body:
                 type === "folders"
-                  ? { folderIds: [...state.selected].map(Number) }
-                  : { channelIds: [...state.selected] },
-            }),
-          ),
+                  ? { folderIds: selected.map(Number) }
+                  : { channelIds: selected },
+            });
+            if (selected.length === state.selected.size && selected.every(id => state.selected.has(id))) state.dirty = false;
+          }),
       );
       const failure = results.find((r) => r.status === "rejected");
       if (failure) throw failure.reason;

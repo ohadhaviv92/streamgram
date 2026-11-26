@@ -1,5 +1,6 @@
 import {
   Body,
+  BadRequestException,
   Controller,
   Get,
   HttpCode,
@@ -11,11 +12,13 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Request } from "express";
+import { ApiOperation, ApiResponse } from "@nestjs/swagger";
 import { CacheService } from "../cache/cache.service";
 import { TelegramNestService } from "../telegram/telegram.service";
 import { InstanceConfigService } from "./instance-config.service";
 import { UserService } from "./user.service";
 import { UpdateChannelsDto } from "./dto/update-channels.dto";
+import { UpdateLiveChannelsDto } from "./dto/update-live-channels.dto";
 import { UpdateFoldersDto } from "./dto/update-folders.dto";
 import { UpdateSettingsDto } from "./dto/update-settings.dto";
 import { ChannelsResponseDto } from "./dto/channels-response.dto";
@@ -233,6 +236,43 @@ export class UserController {
       );
       return { success: false, message: "Failed to update channels" };
     }
+  }
+
+  @Get("live-channels")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "List Telegram channels and this account's independent Live TV selections" })
+  @ApiResponse({ status: 200, type: ChannelsResponseDto })
+  async getLiveChannels(@Req() request: Request): Promise<ChannelsResponseDto> {
+    const profile = request.user;
+    const channels = await this.telegramService.getUserChannels(profile.token, profile.session_string);
+    const selected = this.instanceConfig.getUserByToken(profile.token)?.selectedLiveChannels ?? [];
+    const available = channels.filter(channel => /^-100[1-9]\d*$/.test(channel.id));
+    // Retain inaccessible/offline selections so they can still be deselected.
+    for (const id of selected) {
+      if (!available.some(channel => channel.id === id)) available.push({ id, title: `Channel ${id}` });
+    }
+    return {
+      success: true,
+      channels: available.map(channel => ({ ...channel, isSelected: selected.includes(channel.id) })),
+      catalogUrl: `${this.getBaseUrl(request)}/${profile.token}/catalog/tv/telegram_live.json`,
+    };
+  }
+
+  @Post("live-channels")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Save the account's selected Live TV channels" })
+  @ApiResponse({ status: 200, type: SettingsResponseDto })
+  async updateLiveChannels(@Body() body: UpdateLiveChannelsDto, @Req() request: Request): Promise<SettingsResponseDto> {
+    const profile = request.user;
+    if (body.channelIds.length) {
+      const available = await this.telegramService.getUserChannels(profile.token, profile.session_string);
+      const previous = this.instanceConfig.getUserByToken(profile.token)?.selectedLiveChannels ?? [];
+      if (body.channelIds.some(id => !previous.includes(id) && !available.some(channel => channel.id === id))) {
+        throw new BadRequestException("Select channels available to this Telegram account");
+      }
+    }
+    await this.instanceConfig.updateUserSelections(profile.token, { selectedLiveChannels: body.channelIds });
+    return { success: true, message: "Live TV channels saved", catalogUrl: `${this.getBaseUrl(request)}/${profile.token}/catalog/tv/telegram_live.json` };
   }
 
   private getBaseUrl(request: Request): string {

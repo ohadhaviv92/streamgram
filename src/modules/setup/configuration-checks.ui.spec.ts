@@ -57,7 +57,7 @@ describe("Browser configuration checks", () => {
     await new Promise<void>((resolve) => setImmediate(resolve));
     expect(f.warning.hidden).toBe(false);
     expect(f.warning.innerHTML).toContain("Telegram API (Unverified)");
-    expect(f.warning.innerHTML).toContain("Streaming HTTPS (Failed)");
+    expect(f.warning.innerHTML).toContain("HTTPS for Stremio (Failed)");
     expect(f.warning.innerHTML).not.toContain("TMDB API");
     expect(f.warning.innerHTML).toContain('href="#settings"');
     const check = f.checks.check();

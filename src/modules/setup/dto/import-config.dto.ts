@@ -3,6 +3,8 @@ import { plainToInstance, Type } from "class-transformer";
 import { BadRequestException } from "@nestjs/common";
 import {
   IsArray,
+  ArrayMaxSize,
+  ArrayUnique,
   IsBoolean,
   IsIn,
   IsInt,
@@ -40,6 +42,13 @@ class ImportUserDto implements UserEntry {
   @IsString({ each: true })
   @IsOptional()
   selectedChannels?: string[];
+  @IsArray()
+  @ArrayMaxSize(100)
+  @ArrayUnique()
+  @IsString({ each: true })
+  @Matches(/^-100[1-9]\d{0,16}$/, { each: true })
+  @IsOptional()
+  selectedLiveChannels?: string[];
 }
 @ValidatorConstraint({ name: "usersMap", async: false })
 class UsersMap implements ValidatorConstraintInterface {

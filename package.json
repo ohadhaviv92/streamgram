@@ -50,6 +50,7 @@
     "class-validator": "^0.14.3",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "mp4box": "2.6.0",
     "pino": "^9.3.2",
     "pino-pretty": "^11.2.2",
     "qrcode": "^1.5.4",

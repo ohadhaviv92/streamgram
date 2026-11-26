@@ -27,8 +27,9 @@ Dockerfile
 docs/
 assets/
 
-*.spec.ts
-*.test.ts
+**/*.spec.ts
+**/*.test.ts
 test/
 tests/
 __tests__/
+src/modules/stream/fixtures/

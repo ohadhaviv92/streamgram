@@ -21,6 +21,8 @@ export interface UserEntry {
   selectedFolders?: number[];
   /** IDs of selected channels for this user. */
   selectedChannels?: string[];
+  /** Channels selected for native Telegram live broadcasts. */
+  selectedLiveChannels?: string[];
 }
 
 /**

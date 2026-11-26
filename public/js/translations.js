@@ -1,4 +1,8 @@
 export const ru = {
+  "Live TV channels": "Телеканалы в прямом эфире",
+  "Search live channels": "Поиск каналов прямого эфира",
+  "Select channels for native Telegram live broadcasts in Stremio and Nuvio. Offline channels stay visible. Playback supports H.264/AAC RTMP broadcasts.": "Выберите каналы для просмотра прямых трансляций Telegram в Stremio и Nuvio. Каналы без эфира остаются видимыми. Поддерживаются RTMP-трансляции с видео H.264 и аудио AAC.",
+
   "HTTPS for Stremio": "HTTPS для Stremio",
   "Skipped": "Пропущено",
   "Nuvio supports HTTP; HTTPS is required for Stremio. Use a server URL your playback device can reach.": "Nuvio поддерживает HTTP; для Stremio нужен HTTPS. Укажите адрес сервера, доступный устройству воспроизведения.",
@@ -290,6 +294,10 @@ export const ru = {
   "Removes cached search results, message details, folders, and channel video lists for all accounts.": "Удаляет из кэша результаты поиска, данные сообщений, папки и списки видео каналов всех аккаунтов."
 };
 export const ar = {
+  "Live TV channels": "قنوات البث المباشر",
+  "Search live channels": "البحث عن قنوات مباشرة",
+  "Select channels for native Telegram live broadcasts in Stremio and Nuvio. Offline channels stay visible. Playback supports H.264/AAC RTMP broadcasts.": "اختر قنوات لمشاهدة بث تيليجرام المباشر في Stremio وNuvio. تبقى القنوات غير المتصلة ظاهرة. يدعم التشغيل بث RTMP بفيديو H.264 وصوت AAC.",
+
   "HTTPS for Stremio": "HTTPS لـ Stremio",
   "Skipped": "تم التخطي",
   "Nuvio supports HTTP; HTTPS is required for Stremio. Use a server URL your playback device can reach.": "يدعم Nuvio بروتوكول HTTP؛ ويتطلب Stremio بروتوكول HTTPS. استخدم عنوان خادم يمكن لجهاز التشغيل الوصول إليه.",
@@ -581,6 +589,10 @@ export const ar = {
   "Removes cached search results, message details, folders, and channel video lists for all accounts.": "يمسح نتائج البحث وتفاصيل الرسائل والمجلدات وقوائم فيديوهات القنوات المخزنة مؤقتًا لجميع الحسابات."
 };
 export const es = {
+  "Live TV channels": "Canales de TV en directo",
+  "Search live channels": "Buscar canales en directo",
+  "Select channels for native Telegram live broadcasts in Stremio and Nuvio. Offline channels stay visible. Playback supports H.264/AAC RTMP broadcasts.": "Selecciona canales para ver emisiones nativas de Telegram en Stremio y Nuvio. Los canales sin emisión siguen visibles. Se admiten emisiones RTMP con vídeo H.264 y audio AAC.",
+
   "HTTPS for Stremio": "HTTPS para Stremio",
   "Skipped": "Omitida",
   "Nuvio supports HTTP; HTTPS is required for Stremio. Use a server URL your playback device can reach.": "Nuvio admite HTTP; Stremio requiere HTTPS. Usa una URL del servidor accesible desde tu dispositivo de reproducción.",
