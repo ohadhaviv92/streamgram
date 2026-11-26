@@ -5,6 +5,7 @@ import { Logger, LogLevel } from "teleproto/extensions/Logger";
 import { StringSession } from "teleproto/sessions";
 import { TypeNotFoundError } from "teleproto/errors";
 import { logger } from "../../logger";
+import { measureOtherRpc } from "./search-measurement";
 import { InstanceConfigService } from "../user/instance-config.service";
 
 export interface ClientSession {
@@ -264,7 +265,9 @@ export class TelegramClientManager implements OnApplicationShutdown {
     client.invoke = (async (...args: Parameters<TelegramClient["invoke"]>) => {
       const release = this.retainClient(client);
       try {
-        return await invoke(...args);
+        return await (args[0] instanceof Api.messages.SearchGlobal
+          ? invoke(...args)
+          : measureOtherRpc(args[0].className, () => invoke(...args)));
       } catch (error) {
         if (error instanceof TypeNotFoundError) this.failClient(client, error);
         throw error;

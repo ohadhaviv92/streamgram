@@ -855,7 +855,7 @@ describe("TelegramNestService - Tag Feature", () => {
       return controller.getStream({ user: { token: "fixture", language: "he" } } as Request, details.type, id);
     }
 
-    it.each([true, false])("always searches videos and documents for S1E10 (general search has a dub: %s)", async (hasDub) => {
+    it.each([true, false])("always searches videos and documents for S1E10 (video search has a dub: %s)", async (hasDub) => {
       const media: MediaDetails = { id: 12609, imdbId: "tt0088509", title: "Dragon Ball",
         localizedTitle: "דרגון בול", type: "series", episodeInfo: { season: 1, episode: 10 } };
       const title = "דרגון בול עונה 1 פרק 10";
@@ -874,15 +874,12 @@ describe("TelegramNestService - Tag Feature", () => {
         filters.push(request.filter.className);
         filtersByQuery.set(request.q, filters);
         if (request.filter instanceof Api.InputMessagesFilterVideo) {
-          return searchResponse(request.q === title ? [archiveCopy, episode, spinOff] : [], [otherChannel, seriesChannel]);
+          return searchResponse(request.q === title ? [archiveCopy, episode, spinOff, ...(hasDub ? [dub] : [])] : [], [otherChannel, seriesChannel]);
         }
         if (request.filter instanceof Api.InputMessagesFilterDocument) {
           return searchResponse(request.q === "Dragon Ball s01e10" ? [document] : [], [channel]);
         }
-        if (!hasDub && request.q === title) {
-          return new Api.messages.MessagesSlice({ messages: [spinOff], topics: [], chats: [channel], users: [], count: 278 });
-        }
-        return searchResponse(hasDub && request.q === title ? [dub] : [], [seriesChannel]);
+        return searchResponse([], [seriesChannel]);
       });
       mockCacheService.getSearchResults.mockResolvedValue(null);
       competingTitles.mockResolvedValue(["Dragon Ball Super"]);
@@ -893,10 +890,33 @@ describe("TelegramNestService - Tag Feature", () => {
       expect(results[0].hasSubtitles).toBe(true);
       if (hasDub) expect(results[1].isDubbed).toBe(true);
       for (const query of [title, "דרגון בול ע1 פ10", "דרגון בול ע01 פ10", "Dragon Ball s01e10", "Dragon Ball s1e10"]) {
-        expect(filtersByQuery.get(query)).toEqual(["InputMessagesFilterVideo", "InputMessagesFilterDocument", "InputMessagesFilterEmpty"]);
+        expect(filtersByQuery.get(query)).toEqual(["InputMessagesFilterVideo", "InputMessagesFilterDocument"]);
       }
+      expect(client.invoke).toHaveBeenCalledTimes(12);
       expect(filtersByQuery.get("דרגון בול")).toEqual(["InputMessagesFilterEmpty"]);
       expect(filtersByQuery.get("/tag tt0088509:1:10")).toEqual(["InputMessagesFilterEmpty"]);
+    });
+
+    it.each(["empty", "short", "failed"])("still searches documents after a %s video response", async (outcome) => {
+      const media: MediaDetails = { id: 12609, imdbId: "tt0088509", title: "Dragon Ball",
+        type: "series", episodeInfo: { season: 1, episode: 10 } };
+      const video = release(70, "Dragon.Ball.S01E10.HebDub.mp4");
+      const document = release(71, "Dragon.Ball.S01E10.HebSub.mkv");
+      const client = searchClient([]);
+      jest.mocked(client.invoke).mockImplementation(async (request) => {
+        if (!(request instanceof Api.messages.SearchGlobal)) throw Error("Unexpected request");
+        if (request.filter instanceof Api.InputMessagesFilterVideo) {
+          if (outcome === "failed") throw Error("TIMEOUT");
+          return searchResponse(outcome === "short" ? [video] : [], [channel]);
+        }
+        return searchResponse([document], [channel]);
+      });
+      const results = await (service as any).performGlobalSearch(client, "Dragon Ball s01e10", media, undefined, "he", true);
+      expect(results.map((result: MediaSearchResult) => result.messageId)).toEqual(outcome === "short" ? [70, 71] : [71]);
+      expect(results.find((result: MediaSearchResult) => result.messageId === 71).hasSubtitles).toBe(true);
+      expect(client.invoke).toHaveBeenCalledTimes(2);
+      expect(jest.mocked(client.invoke).mock.calls.map(([request]) => (request as Api.messages.SearchGlobal).filter.className))
+        .toEqual(["InputMessagesFilterVideo", "InputMessagesFilterDocument"]);
     });
 
     it("surfaces message 51 for tt0088509:1:5 and keeps spin-offs with their own series", async () => {

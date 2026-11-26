@@ -60,6 +60,12 @@ StreamGram brings your Telegram videos into Stremio and Nuvio in three ways:
 
 Open a movie or episode from a catalog in your player. StreamGram uses its metadata, localized titles and episode information to find matching Telegram videos and show them as playback sources for that title.
 
+#### Search call reporting
+
+Each metadata-based source search writes a `Telegram media search completed` structured log. `globalSearch` contains attempt/success/failure totals; `calls` breaks them down by query, filter, and phase (`tags`, `primary`, `short-title`, or `channel-fallback`), with requested limits, returned counts, reported totals when available, video candidates, accepted playable candidates before episode/title matching, and RPC duration. `otherRpc` counts other Telegram methods separately. `ordinaryCacheHit`, `finalUniqueResultCount`, and `elapsedMs` describe the overall search; `searchId` identifies its summary without exposing account credentials.
+
+Counts represent application-level RPC invocations, excluding retries internal to the Telegram library. Precise episode queries search both Video and Document; broad titles and live tags retain unfiltered searches. A short response never skips other filters or query formats.
+
 ### 2. Channel and Folder Catalogs — Browse Videos
 
 Select Telegram channels or folders in settings. They appear as catalogs in your player, where you can browse their videos and choose what to watch.

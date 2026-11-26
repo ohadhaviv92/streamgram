@@ -22,6 +22,7 @@ import { logger } from "../../logger";
 import { TelegramClientManager } from "./telegram-client.manager";
 import { InstanceConfigService } from "../user/instance-config.service";
 import { InstanceProfile } from "../user/instance-profile";
+import { inSearchPhase, measureGlobalSearch, measureSearch, recordSearchCacheHit } from "./search-measurement";
 
 export class TelegramClientUnavailableError extends Error {
   constructor(message: string) {
@@ -972,10 +973,10 @@ export class TelegramNestService {
     media: MediaDetails,
     catalogId?: string,
     language: string = this.LANGUAGE_CONFIG.preferredLanguage,
-    includeFileFilters = false,
+    filesOnly = false,
   ): Promise<MediaSearchResult[]> {
-    const filters = includeFileFilters
-      ? [new Api.InputMessagesFilterVideo(), new Api.InputMessagesFilterDocument(), new Api.InputMessagesFilterEmpty()]
+    const filters = filesOnly
+      ? [new Api.InputMessagesFilterVideo(), new Api.InputMessagesFilterDocument()]
       : [new Api.InputMessagesFilterEmpty()];
 
     const results: MediaSearchResult[] = [];
@@ -994,18 +995,20 @@ export class TelegramNestService {
       }
 
       let searchResult: Api.messages.TypeMessages;
+      let measuredCall: Awaited<ReturnType<typeof measureGlobalSearch>>["call"];
       try {
-        searchResult = await client.invoke(
-          new Api.messages.SearchGlobal({
-            q: query,
-            filter,
-            minDate: 0,
-            maxDate: 0,
-            offsetRate: 0,
-            offsetPeer: new Api.InputPeerEmpty(),
-            limit: this.SEARCH_CONFIG.globalSearchLimit,
-          }),
-        );
+        const request = new Api.messages.SearchGlobal({
+          q: query,
+          filter,
+          minDate: 0,
+          maxDate: 0,
+          offsetRate: 0,
+          offsetPeer: new Api.InputPeerEmpty(),
+          limit: this.SEARCH_CONFIG.globalSearchLimit,
+        });
+        const measured = await measureGlobalSearch(request, () => client.invoke(request), (message) => this.isVideoFromSearchResult(message));
+        searchResult = measured.response;
+        measuredCall = measured.call;
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
         // Check for timeout/connection errors
@@ -1050,16 +1053,7 @@ export class TelegramNestService {
       const rawMessages = (searchResult.messages as Api.TypeMessage[]).filter(
         (msg): msg is Api.Message => msg instanceof Api.Message,
       );
-      // Debug: log filter class name, query, and number of raw messages
-      // eslint-disable-next-line no-console
-      console.log(
-        "Filter:",
-        filter?.className,
-        "Query:",
-        query,
-        "RawMessages:",
-        rawMessages.length,
-      );
+      const previousResultCount = results.length;
 
       // Group messages by peer for batch processing
       const messagesByPeer = new Map<string, Api.Message[]>();
@@ -1230,6 +1224,7 @@ export class TelegramNestService {
           });
         }
       }
+      measuredCall.acceptedVideoCount = results.length - previousResultCount;
     }
 
     return results;
@@ -1497,18 +1492,20 @@ export class TelegramNestService {
     if (cached) return cached.channels;
 
     // A title-only message search discovers joined private chats that contacts.Search omits.
+    const request = new Api.messages.SearchGlobal({
+      q: title,
+      filter: new Api.InputMessagesFilterEmpty(),
+      minDate: 0,
+      maxDate: 0,
+      offsetRate: 0,
+      offsetPeer: new Api.InputPeerEmpty(),
+      offsetId: 0,
+      limit: this.SEARCH_CONFIG.globalSearchLimit,
+    });
     const entry = {
       expiresAt: Infinity,
-      channels: client.invoke(new Api.messages.SearchGlobal({
-        q: title,
-        filter: new Api.InputMessagesFilterEmpty(),
-        minDate: 0,
-        maxDate: 0,
-        offsetRate: 0,
-        offsetPeer: new Api.InputPeerEmpty(),
-        offsetId: 0,
-        limit: this.SEARCH_CONFIG.globalSearchLimit,
-      })).then((found) => {
+      channels: measureGlobalSearch(request, () => client.invoke(request), (message) => this.isVideoFromSearchResult(message))
+        .then(({ response: found }) => {
         if (!("chats" in found)) return [];
         const channels = found.chats.filter((entity): entity is Api.Channel | Api.Chat => {
           if (!(entity instanceof Api.Channel || entity instanceof Api.Chat) || entity.left) return false;
@@ -1722,7 +1719,7 @@ export class TelegramNestService {
   ): Promise<MediaSearchResult[]> {
     const release = this.clientManager.retainClient(client);
     try {
-      return await this.searchMediaWithClient(client, query, media, user, catalogId);
+      return await measureSearch(() => this.searchMediaWithClient(client, query, media, user, catalogId));
     } finally {
       release();
     }
@@ -1747,7 +1744,7 @@ export class TelegramNestService {
     // Tags live in Telegram: additions, edits and deletions must be visible on
     // every request, independently of the longer-lived ordinary search cache.
     const [tagResults, regularResults] = await Promise.all([
-      Promise.all(tagQueries.map(async (tagQuery) => {
+      inSearchPhase("tags", () => Promise.all(tagQueries.map(async (tagQuery) => {
         try {
           return (await this.performGlobalSearch(client, tagQuery, media, catalogId, language))
             .filter((result) => Boolean(result.customName));
@@ -1755,7 +1752,7 @@ export class TelegramNestService {
           logger.warn({ query: tagQuery, error }, "Tag search failed");
           return [];
         }
-      })),
+      }))),
       this.searchUntaggedMediaWithClient(
         client, query, media, user, catalogId, language, regularQueries,
       ),
@@ -1817,8 +1814,9 @@ export class TelegramNestService {
       cacheKey,
     );
     if (cached) {
+      recordSearchCacheHit();
       logger.info(
-        { cacheKey, count: cached.length },
+        { count: cached.length },
         "Search results cache hit",
       );
       return cached;
@@ -1826,7 +1824,7 @@ export class TelegramNestService {
 
     // Check if client is connected before searching
     if (!client.connected) {
-      logger.error({ cacheKey }, "Client disconnected, cannot perform search");
+      logger.error({}, "Client disconnected, cannot perform search");
       throw new TelegramClientUnavailableError(
         "Telegram client is not connected",
       );
@@ -1877,13 +1875,13 @@ export class TelegramNestService {
         }
       }
     };
-    await searchTitles(queries);
+    await inSearchPhase("primary", () => searchTitles(queries));
     if (matcher && episodeInfo && !exact.length) {
       const shortQueries = this.generateShortTitleEpisodeSearchQueries(baseTitle, media, episodeInfo, language)
         .filter((shortQuery) => !queries.includes(shortQuery));
-      await searchTitles(shortQueries);
+      await inSearchPhase("short-title", () => searchTitles(shortQueries));
       if (!exact.length) {
-        const fallback = await this.searchSeriesChannelFallback(client, media, language, matcher);
+        const fallback = await inSearchPhase("channel-fallback", () => this.searchSeriesChannelFallback(client, media, language, matcher));
         exact.push(...fallback.clear);
         partial.push(...fallback.ambiguous);
       }
@@ -1902,7 +1900,6 @@ export class TelegramNestService {
     await this.cache.setSearchResults(user.token, cacheKey, limited);
     logger.info(
       {
-        cacheKey,
         exactMatches: exact.length,
         partialMatches: partial.length,
         finalCount: limited.length,
