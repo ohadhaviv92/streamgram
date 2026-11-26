@@ -94,33 +94,32 @@ export class StreamController {
 
     return {
       id: "community.telegram-stream-addon",
-      version: "1.3.0",
+      version: "1.3.1",
       name: `StreamGram ${nodeEnv === "development" ? "(Dev)" : ""}`,
       description:
         "Search and stream movies/series directly from Telegram. Access your Telegram folders and channels in Stremio.",
       logo: "https://i.ibb.co/Hf8xxJbL/logo-icon-transparent.png",
       resources: ["catalog", "meta", "stream"],
-      types: ["movie", "series", "tv"],
+      types: ["movie", "series"],
       catalogs: [
-        { type: "tv", id: "telegram_live", name: "StreamGram — Live TV" },
-        {
-          type: "movie",
-          id: "telegram_channels",
-          name: "StreamGram — Channels",
-        },
-        {
-          type: "series",
-          id: "telegram_folders",
-          name: "StreamGram — Folders",
-        },
         {
           type: "movie",
           id: "tg_library",
           name: "StreamGram — Telegram Search",
           extra: [{ name: "search", isRequired: true }],
         },
+        {
+          type: "series",
+          id: "telegram_folders",
+          name: "My Telegram Folders",
+        },
+        {
+          type: "movie",
+          id: "telegram_channels",
+          name: "My Telegram Channels",
+        },
       ],
-      idPrefixes: ["tg_live_", "tg_file_", "tg_folder_", "tg_channel_", "tmdb", "tt"],
+      idPrefixes: ["tg_file_", "tg_folder_", "tg_channel_", "tmdb", "tt"],
       behaviorHints: {
         adult: false,
         p2p: false,
@@ -709,9 +708,6 @@ export class StreamController {
 
     try {
       const decoded = decodeURIComponent(idWithEpisode);
-      // Native live movie routes are handled by LiveController. Never send
-      // live IDs for other media types through metadata/video-file searches.
-      if (decoded.startsWith("tg_live_")) return { streams: [] };
       let result: SearchResponsePayload | null = null;
 
       if (decoded.includes(":")) {

@@ -1,10 +1,9 @@
+import { removeLegacyLiveSelections } from "../../user/legacy-config";
 import { NotificationSettingsDto, validateNotificationSettings } from "../../notifications/dto/notification-settings.dto";
 import { plainToInstance, Type } from "class-transformer";
 import { BadRequestException } from "@nestjs/common";
 import {
   IsArray,
-  ArrayMaxSize,
-  ArrayUnique,
   IsBoolean,
   IsIn,
   IsInt,
@@ -42,13 +41,6 @@ class ImportUserDto implements UserEntry {
   @IsString({ each: true })
   @IsOptional()
   selectedChannels?: string[];
-  @IsArray()
-  @ArrayMaxSize(100)
-  @ArrayUnique()
-  @IsString({ each: true })
-  @Matches(/^-100[1-9]\d{0,16}$/, { each: true })
-  @IsOptional()
-  selectedLiveChannels?: string[];
 }
 @ValidatorConstraint({ name: "usersMap", async: false })
 class UsersMap implements ValidatorConstraintInterface {
@@ -123,7 +115,7 @@ export class ImportConfigDto {
 export function validateBackup(incoming: unknown): PersistedInstanceConfig {
   if (!incoming || typeof incoming !== "object" || Array.isArray(incoming))
     throw new BadRequestException("Invalid backup");
-  const parsed = plainToInstance(ImportConfigDto, incoming);
+  const parsed = plainToInstance(ImportConfigDto, removeLegacyLiveSelections(incoming));
   if (
     validateSync(parsed, { whitelist: true, forbidNonWhitelisted: true }).length
   )

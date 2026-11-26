@@ -43,7 +43,6 @@
 
 - 📺 **Stream provider** — open a movie or episode in Stremio or Nuvio to find matching Telegram playback sources using the title's metadata and localized names.
 - 📂 **Channel and folder catalogs** — select Telegram channels or folders in settings and browse their videos as catalogs in your player.
-- 🔴 **Live TV catalog** — select Telegram channels and watch their native live broadcasts in Stremio or Nuvio.
 - 🔎 **Global Telegram search** — search from Stremio or Nuvio using exactly the text you type, just like searching in Telegram. Get up to 100 video items, each with one playback stream.
 - 🔗 Install StreamGram using a private `/:userToken/manifest.json` addon URL.
 - 🎬 Use TMDB metadata and localized search terms for movies and series.
@@ -69,13 +68,7 @@ Counts represent application-level RPC invocations, excluding retries internal t
 
 ### 2. Channel and Folder Catalogs — Browse Videos
 
-Select Telegram channels or folders in settings. They appear as **StreamGram — Channels** and **StreamGram — Folders** in your player, where you can browse their videos and choose what to watch.
-
-#### Live TV — Native Telegram Broadcasts
-
-In account settings, click **Load folders and channels**, select **Live TV channels**, and click **Save catalogs**. They appear in **StreamGram — Live TV** with their Telegram photos. Refresh the addon if the catalog is missing.
-
-Supports native Telegram RTMP broadcasts (e.g. from OBS) with H.264 video and AAC audio. Regular Telegram video chats and external links posted in messages are not supported. Playback uses HLS without transcoding; availability is checked only when opening a channel.
+Select Telegram channels or folders in settings. They appear as catalogs in your player, where you can browse their videos and choose what to watch.
 
 ### 3. Global Telegram Search — Search What You Type
 

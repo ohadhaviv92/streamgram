@@ -11,7 +11,6 @@ import { join } from "path";
 import { createHash } from "crypto";
 import { RequestValidationPipe } from "../../common/pipes/request-validation.pipe";
 import { StreamHandlerService } from "../stream/stream-handler.service";
-import { LiveService } from "../stream/live.service";
 import { AppModule } from "../../app.module";
 import { InstanceConfigService } from "../user/instance-config.service";
 import { TelegramClientManager } from "../telegram/telegram-client.manager";
@@ -44,24 +43,17 @@ beforeEach(() => {
 afterEach(() => rmSync(directory, { recursive: true, force: true }));
 
 describe("Persistence, passwords and invitations", () => {
-  it("persists independent live selections through reconnect and backup restore", async () => {
+  it("restores backups from the removed catalog without restoring its preferences", async () => {
     const config = instance();
-    const a = config.completeAuthentication({ kind: "admin", id: "admin" }, "+11111", "1", "session-a");
-    const b = config.completeAuthentication({ kind: "admin", id: "admin" }, "+22222", "2", "session-b");
-    expect(config.getUserByToken(a.token)?.selectedLiveChannels).toBeUndefined();
-    await config.updateUserSelections(a.token, { selectedChannels: ["123"], selectedLiveChannels: ["-1001981952129"] });
-    config.completeAuthentication({ kind: "user", id: a.token }, "+11111", "1", "replacement-session");
-    expect(instance().getUserByToken(a.token)?.selectedLiveChannels).toEqual(["-1001981952129"]);
-    expect(config.getUserByToken(b.token)?.selectedLiveChannels).toBeUndefined();
+    const account = config.completeAuthentication({ kind: "admin", id: "owner" }, "+11111", "1", "session");
+    await config.updateUserSelections(account.token, { selectedChannels: ["123"] });
     const backup = JSON.parse(config.exportRaw());
-    await config.updateUserSelections(a.token, { selectedLiveChannels: [] });
+    backup.users[account.token].selectedLiveChannels = ["-1001981952129"];
     await config.importRaw(backup);
-    expect(config.getUserByToken(a.token)).toMatchObject({ selectedChannels: ["123"], selectedLiveChannels: ["-1001981952129"], sessionString: "replacement-session" });
-    const bad = JSON.parse(config.exportRaw());
-    bad.users[a.token].selectedLiveChannels = ["https://example.test/stream"];
-    await expect(config.importRaw(bad)).rejects.toThrow();
-    expect(config.getUserByToken(a.token)?.selectedLiveChannels).toEqual(["-1001981952129"]);
+    expect(config.getUserByToken(account.token)).toMatchObject({ token: account.token, selectedChannels: ["123"] });
+    expect(config.getUserByToken(account.token)).not.toHaveProperty("selectedLiveChannels");
   });
+
   it("fills unnamed accounts from Telegram and preserves custom and invitation names", () => {
     const config = instance();
     const owner: AuthOwner = { kind: "admin", id: "admin" };
@@ -523,68 +515,15 @@ describe("HTTP management and personal access", () => {
     jest.restoreAllMocks();
     await app.close();
   });
-  it("guards live selections and routes the separate Live TV catalog without video-file searches", async () => {
-    const a = config.completeAuthentication({ kind: "admin", id: "admin" }, "+11111", "1", "session-a");
-    const b = config.completeAuthentication({ kind: "admin", id: "admin" }, "+22222", "2", "session-b");
-    const channelId = "-1001981952129";
-    const headers = { authorization: `Bearer ${a.token}` };
-    expect((await request("/live-channels")).status).toBe(401);
-    expect((await request("/live-channels", "POST", { channelIds: [channelId] })).status).toBe(401);
-    telegram.getUserChannels.mockResolvedValueOnce([{ id: channelId, title: "Live TV" }, { id: "123", title: "User" }]);
-    expect((await request("/live-channels", "GET", undefined, headers)).data.channels).toEqual([{ id: channelId, title: "Live TV", isSelected: false }]);
-    for (const channelIds of [["-1981952129"], [channelId, channelId], [123], ["https://example.test"]]) {
-      expect((await request("/live-channels", "POST", { channelIds }, headers)).status).toBe(400);
-    }
-    expect((await request("/live-channels", "POST", { channelIds: [channelId], selectedChannels: [] }, headers)).status).toBe(400);
-    expect((await request("/live-channels", "POST", { channelIds: [channelId] }, { ...headers, origin: "https://evil.example" })).status).toBe(403);
-    telegram.getUserChannels.mockResolvedValueOnce([{ id: channelId, title: "Live TV" }]);
-    expect((await request("/live-channels", "POST", { channelIds: [channelId] }, headers)).status).toBe(200);
-    expect(config.getUserByToken(a.token)?.selectedLiveChannels).toEqual([channelId]);
-    expect(config.getUserByToken(b.token)?.selectedLiveChannels).toBeUndefined();
-    const manifest = await request(`/${a.token}/manifest.json`);
-    expect(manifest.data.catalogs).toContainEqual({ id: "telegram_live", type: "tv", name: "StreamGram — Live TV" });
-    expect(manifest.data.catalogs).toContainEqual({ id: "telegram_channels", type: "movie", name: "StreamGram — Channels" });
-    expect(manifest.data.catalogs).toContainEqual({ id: "telegram_folders", type: "series", name: "StreamGram — Folders" });
-    expect(manifest.data.types).toContain("tv");
-    expect(manifest.data.idPrefixes).toContain("tg_live_");
-    const catalog = await request(`/${a.token}/catalog/tv/telegram_live.json`);
-    expect(catalog.data.metas).toHaveLength(1);
-    expect(catalog.data.metas[0].id).toBe(`tg_live_${channelId}`);
-    expect(catalog.data.metas[0].type).toBe("tv");
-    expect(catalog.data.metas[0].behaviorHints.isLive).toBe(true);
-    expect((await request(`/${a.token}/meta/tv/tg_live_${channelId}.json`)).data.meta.type).toBe("tv");
-    const legacy = await request(`/${a.token}/catalog/movie/telegram_live.json`);
-    expect(legacy.data.metas[0].type).toBe("movie");
-    expect((await request(`/${a.token}/meta/movie/tg_live_${channelId}.json`)).data.meta.type).toBe("movie");
-    expect((await request(`/${a.token}/catalog/series/telegram_live.json`)).status).toBe(404);
-    expect((await request(`/${b.token}/catalog/movie/telegram_live.json`)).data).toEqual({ metas: [] });
-    expect((await request(`/${b.token}/meta/movie/tg_live_${channelId}.json`)).data).toEqual({ meta: null });
-    expect((await request(`/${a.token}/stream/movie/tg_live_${channelId}.json`)).data).toEqual({ streams: [] });
-    const liveStreams = { streams: [{ name: "Live", title: "Live", url: `${base}/live.m3u8`, behaviorHints: { notWebReady: true } }] };
-    const streams = jest.spyOn(app.get(LiveService), "streams").mockResolvedValueOnce(liveStreams);
-    expect((await request(`/${a.token}/stream/tv/tg_live_${channelId}.json`)).data).toEqual(liveStreams);
-    expect(streams).toHaveBeenCalledWith(expect.objectContaining({ token: a.token }), channelId, `${base}/${a.token}`);
-    expect((await request(`/${a.token}/stream/series/tg_live_${channelId}.json`)).data).toEqual({ streams: [] });
-    expect((await request(`/${b.token}/live/${channelId}/index.m3u8`)).status).toBe(404);
-    expect((await request(`/unknown-account/live/${channelId}/index.m3u8`)).status).toBe(401);
-    expect((await request("/live-channels", "POST", { channelIds: [] }, headers)).status).toBe(200);
-  });
-  it("serves private live channel thumbnails and falls back when a channel has no photo", async () => {
-    const account = config.completeAuthentication({ kind: "admin", id: "admin" }, "+11111", "1", "session-a");
-    const channelId = "-1001981952129";
-    await config.updateUserSelections(account.token, { selectedLiveChannels: [channelId] });
-    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
-    jest.spyOn(app.get(LiveService), "thumbnail").mockResolvedValueOnce(jpeg).mockResolvedValueOnce(null);
-    const path = `/${account.token}/live/${channelId}/thumbnail.jpg`;
-    const photo = await fetch(base + path);
-    expect(photo.status).toBe(200);
-    expect(photo.headers.get("content-type")).toContain("image/jpeg");
-    expect(photo.headers.get("cache-control")).toBe("private, max-age=300");
-    expect(Buffer.from(await photo.arrayBuffer())).toEqual(jpeg);
-    const fallback = await request(path);
-    expect(fallback.status).toBe(302);
-    expect(fallback.location).toBe(`${base}/logo-icon-only.png`);
-    expect((await request(`/unknown-account/live/${channelId}/thumbnail.jpg`)).status).toBe(401);
+  it("does not advertise or expose the removed live catalog", async () => {
+    const account = config.completeAuthentication({ kind: "admin", id: "owner" }, "+11111", "1", "session");
+    const manifest = await request(`/${account.token}/manifest.json`);
+    expect(manifest.status).toBe(200);
+    expect(manifest.data.types).not.toContain("tv");
+    expect(manifest.data.idPrefixes).not.toContain("tg_live_");
+    expect(manifest.data.catalogs.some((catalog: { id: string }) => catalog.id === "telegram_live")).toBe(false);
+    expect((await request("/live-channels")).status).toBe(404);
+    expect((await request(`/${account.token}/live/-1001981952129/index.m3u8`)).status).toBe(404);
   });
   it.each([
     ["/admin/accounts", "GET"],

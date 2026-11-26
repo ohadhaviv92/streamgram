@@ -462,65 +462,6 @@ test('signed-in admins edit the account name in the original preferences form', 
   assert.equal(element('h1').textContent, 'New label');
 });
 
-test('live channel selections are searchable and saved independently from video channels', async () => {
-  const nodes = new Map(), calls = [];
-  const element = selector => {
-    if (!nodes.has(selector)) nodes.set(selector, {
-      innerHTML: '', value: '', children: [],
-      replaceChildren(...children) { this.children = children; },
-      append(...children) { this.children.push(...children); },
-    });
-    return nodes.get(selector);
-  };
-  const context = vm.createContext({
-    bindSearchLanguageExample() {}, shell() {}, t: text => text, $: element, esc: value => String(value ?? ''),
-    badge: () => '', installCard: () => '', button: () => '', languageOptions: () => '',
-    document: { createElement: () => ({ children: [], append(...children) { this.children.push(...children); } }) },
-    api: async (url, options) => {
-      calls.push({ url, options });
-      if (options.method) return { success: true };
-      if (url === '/folders') return { folders: [] };
-      if (url === '/channels') return { channels: [{ id: '-1001', title: 'Videos', isSelected: true }] };
-      if (url === '/live-channels') return { channels: [{ id: '-1002', title: 'News Live', username: 'news_live', isSelected: false }, { id: '-1003', title: 'Sports Live', isSelected: true }, { id: '-1004', title: 'News Live', isSelected: false }] };
-      return {};
-    },
-    run: async (_, work) => work(), toast() {},
-  });
-  vm.runInContext(source('personal.js'), context);
-  await vm.runInContext('personal("private")', context);
-  await element('#load-sources').onclick();
-  assert.equal(element('#liveChannels-list').children[0].children[1].textContent, 'News Live · @news_live');
-  assert.equal(element('#liveChannels-list').children[2].children[1].textContent, 'News Live · -1004');
-  const checkbox = element('#liveChannels-list').children[0].children[0];
-  checkbox.checked = true;
-  checkbox.onchange();
-  element('#live-channel-search').value = '-1004';
-  element('#live-channel-search').oninput();
-  assert.equal(element('#liveChannels-list').children.length, 1);
-  assert.equal(element('#liveChannels-list').children[0].children[1].textContent, 'News Live · -1004');
-  element('#live-channel-search').value = 'sports';
-  element('#live-channel-search').oninput();
-  assert.equal(element('#liveChannels-list').children.length, 1);
-  await element('#save-sources').onclick();
-  const saved = calls.filter(call => call.options.method === 'POST');
-  assert.deepEqual(Array.from(saved.find(call => call.url === '/live-channels').options.body.channelIds), ['-1003', '-1002']);
-  assert.deepEqual(saved.map(call => call.url), ['/live-channels']);
-  assert.ok(saved.every(call => call.options.token === 'private'));
-  // An unchanged list must not overwrite newer selections saved elsewhere.
-  await element('#save-sources').onclick();
-  assert.equal(calls.filter(call => call.options.method === 'POST').length, 1);
-  // Reloading clean selections uses the server again instead of the old Set.
-  element('#live-channel-search').value = '';
-  await element('#load-sources').onclick();
-  assert.equal(element('#liveChannels-list').children[0].children[0].checked, false);
-  // Saving a different source list cannot put the old live selection back.
-  const channelCheckbox = element('#channels-list').children[0].children[0];
-  channelCheckbox.checked = false;
-  channelCheckbox.onchange();
-  await element('#save-sources').onclick();
-  assert.deepEqual(calls.filter(call => call.options.method === 'POST').map(call => call.url), ['/live-channels', '/channels']);
-});
-
 function notificationsHarness(respond, connected = true) {
   const nodes = new Map();
   for (const selector of ['form', 'button.primary', '#notifications-enabled', '#notification-bot-token', '#notification-chat-id', '#notification-test', '#notification-delivery', '#recovery-enabled']) {

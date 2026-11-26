@@ -7,8 +7,6 @@ import { TmdbModule } from "../tmdb/tmdb.module";
 import { WikidataModule } from "../wikidata/wikidata.module";
 import { UserModule } from "../user/user.module";
 import { InstanceProfileGuard } from "../../common/guards/instance-profile.guard";
-import { LiveController } from "./live.controller";
-import { LiveService } from "./live.service";
 
 @Module({
   imports: [
@@ -18,11 +16,10 @@ import { LiveService } from "./live.service";
     WikidataModule,
     UserModule,
   ],
-  controllers: [LiveController, StreamController],
+  controllers: [StreamController],
   providers: [
     StreamHandlerService,
     InstanceProfileGuard,
-    LiveService,
   ],
   exports: [StreamHandlerService],
 })

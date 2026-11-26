@@ -197,7 +197,6 @@ export class InstanceConfigService implements OnModuleInit {
       if (name !== undefined) existing.name = name;
       this.persisted.users = users;
       this.writePersistedConfig();
-      this.events.emit("accountsChanged");
       logger.info("Updated existing user");
       return existing;
     }
@@ -233,7 +232,6 @@ export class InstanceConfigService implements OnModuleInit {
     const users = { ...this.getUsers() };
     delete users[token];
     this.commit({ ...this.persisted, users });
-    this.events.emit("accountsChanged");
     this.publishNotification({ type: "account_deleted", name: user.name, phoneLast4: user.phone.replace(/\D/g, "").slice(-4) });
   }
 
@@ -423,7 +421,6 @@ export class InstanceConfigService implements OnModuleInit {
           : i,
       ),
     });
-    this.events.emit("accountsChanged");
     if (!existing) this.publishNotification({ type: "account_joined", name: entry.name, phoneLast4: phone.replace(/\D/g, "").slice(-4) });
     return entry;
   }
@@ -536,13 +533,12 @@ export class InstanceConfigService implements OnModuleInit {
     this.events.emit("securityChanged");
     this.notificationsRevision++;
     this.events.emit("notificationsChanged");
-    this.events.emit("accountsChanged");
     logger.info("Config imported successfully");
   }
 
   async updateUserSelections(
     token: string,
-    selections: { selectedFolders?: number[]; selectedChannels?: string[]; selectedLiveChannels?: string[] },
+    selections: { selectedFolders?: number[]; selectedChannels?: string[] },
   ): Promise<void> {
     const entry = this.getUserByToken(token);
     if (!entry) throw new NotFoundException("User not found");
@@ -554,14 +550,10 @@ export class InstanceConfigService implements OnModuleInit {
     if (selections.selectedChannels !== undefined) {
       updated.selectedChannels = [...selections.selectedChannels];
     }
-    if (selections.selectedLiveChannels !== undefined) {
-      updated.selectedLiveChannels = [...selections.selectedLiveChannels];
-    }
     this.commit({
       ...this.persisted,
       users: { ...this.getUsers(), [token]: updated },
     });
-    this.events.emit("accountsChanged");
   }
 
   // ---------------------------------------------------------------------------
