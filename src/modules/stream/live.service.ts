@@ -13,13 +13,12 @@ export type LiveState = "live" | "offline" | "scheduled" | "unsupported" | "unav
 export type LiveItemType = "tv" | "movie";
 export interface LiveChannelStatus { channelId: string; title: string; state: LiveState; scheduledAt?: number }
 interface Broadcast extends LiveChannelStatus { call?: Api.InputGroupCall; dcId?: number }
-interface Segment { sequence: number; epoch: number; media: Buffer; duration: number; expiresAt?: number }
+interface Segment { sequence: number; epoch: number; media: Buffer; expiresAt?: number }
 interface LiveTimeline {
   token: string;
   channelId: string;
   sessionString: string;
   sequence: number;
-  mediaTime: number;
   epoch: number;
   expiresAt: number;
 }
@@ -38,15 +37,14 @@ interface LiveSession {
   runner?: Promise<void>;
 }
 
-const PLAYLIST_SECONDS = 12;
-const HLS_SEGMENT_SECONDS = 3;
-const STARTUP_SECONDS = 9;
-const SOURCE_BUFFER_MS = 12_000;
+const PLAYLIST_SEGMENTS = 12;
+const STARTUP_SEGMENTS = 6;
+const SOURCE_BUFFER_MS = 8000;
 const CHUNK_PUBLISH_MARGIN_MS = 250;
 const NOT_READY_RETRY_MS = 500;
 // RFC 8216 section 6.2.2: retain removed media for a full playlist plus
 // its own duration, including the initialization map it still references.
-const RETIRED_SEGMENT_MS = (PLAYLIST_SECONDS + HLS_SEGMENT_SECONDS) * 1000;
+const RETIRED_SEGMENT_MS = (PLAYLIST_SEGMENTS + 1) * 1000;
 const MAX_BUFFERED_SEGMENTS = 48;
 const MAX_BUFFERED_BYTES = 48 * 1024 * 1024;
 
@@ -250,7 +248,7 @@ export class LiveService implements OnApplicationShutdown {
       // zero after a failure makes existing HLS players ignore all new media.
       let timeline = this.timelines.get(key);
       if (!timeline || timeline.sessionString !== user.session_string) {
-        timeline = { token: user.token, channelId, sessionString: user.session_string, sequence: 0, mediaTime: 0, epoch: 0, expiresAt: 0 };
+        timeline = { token: user.token, channelId, sessionString: user.session_string, sequence: 0, epoch: 0, expiresAt: 0 };
         this.timelines.set(key, timeline);
       } else timeline.epoch++;
       timeline.expiresAt = Date.now() + 15 * 60_000;
@@ -272,7 +270,7 @@ export class LiveService implements OnApplicationShutdown {
     if (session.abort.signal.aborted) throw new ServiceUnavailableException("Live playback has ended");
     this.pruneSegments(session);
     const segments = session.segments.filter(segment => segment.expiresAt === undefined);
-    const lines = ["#EXTM3U", "#EXT-X-VERSION:7", `#EXT-X-TARGETDURATION:${HLS_SEGMENT_SECONDS}`, `#EXT-X-START:TIME-OFFSET=-${STARTUP_SECONDS}.000,PRECISE=NO`, `#EXT-X-MEDIA-SEQUENCE:${segments[0].sequence}`,
+    const lines = ["#EXTM3U", "#EXT-X-VERSION:7", "#EXT-X-TARGETDURATION:1", `#EXT-X-START:TIME-OFFSET=-${STARTUP_SEGMENTS}.000,PRECISE=NO`, `#EXT-X-MEDIA-SEQUENCE:${segments[0].sequence}`,
       `#EXT-X-DISCONTINUITY-SEQUENCE:${segments[0].epoch}`];
     let epoch: number | undefined;
     for (const segment of segments) {
@@ -281,7 +279,7 @@ export class LiveService implements OnApplicationShutdown {
         lines.push(`#EXT-X-MAP:URI="${session.id}/init-${segment.epoch}.mp4"`);
         epoch = segment.epoch;
       }
-      lines.push(`#EXTINF:${segment.duration.toFixed(3)},`, `${session.id}/segment-${segment.sequence}.m4s`);
+      lines.push("#EXTINF:1.000,", `${session.id}/segment-${segment.sequence}.m4s`);
     }
     return `${lines.join("\n")}\n`;
   }
@@ -377,29 +375,6 @@ export class LiveService implements OnApplicationShutdown {
       let timeMs = 0;
       let nextChunkAt = 0;
       let sequence = session.timeline.sequence;
-      let mediaTime = session.timeline.mediaTime;
-      let pending: { epoch: number; init: Buffer; parts: Buffer[]; duration: number } | undefined;
-      const publishPending = () => {
-        if (!pending) return;
-        const part = pending;
-        pending = undefined;
-        session.inits.set(part.epoch, part.init);
-        session.segments.push({ sequence: sequence++, epoch: part.epoch, media: Buffer.concat(part.parts), duration: part.duration });
-        session.timeline.sequence = sequence;
-        session.timeline.epoch = part.epoch;
-        const active = session.segments.filter(segment => segment.expiresAt === undefined);
-        let activeBytes = active.reduce((size, segment) => size + segment.media.length, 0);
-        let activeSeconds = active.reduce((seconds, segment) => seconds + segment.duration, 0);
-        while (activeSeconds > PLAYLIST_SECONDS || activeBytes > 12 * 1024 * 1024) {
-          const retired = active.shift();
-          if (!retired) break;
-          retired.expiresAt = Date.now() + RETIRED_SEGMENT_MS;
-          activeBytes -= retired.media.length;
-          activeSeconds -= retired.duration;
-        }
-        this.pruneSegments(session);
-        if (activeSeconds >= STARTUP_SECONDS) session.resolve();
-      };
       let epoch = session.timeline.epoch;
       let signature = "";
       let needsKeyframe = true;
@@ -411,8 +386,7 @@ export class LiveService implements OnApplicationShutdown {
         // Pause a burst of catch-up downloads rather than evicting media that
         // was already promised to a viewer. Reserve room for the next 1 MiB part.
         if (session.segments.length >= MAX_BUFFERED_SEGMENTS ||
-            session.segments.reduce((size, segment) => size + segment.media.length, 0) +
-              (pending?.parts.reduce((size, bytes) => size + bytes.length, 0) ?? 0) >= MAX_BUFFERED_BYTES - 4 * 1024 * 1024) {
+            session.segments.reduce((size, segment) => size + segment.media.length, 0) >= MAX_BUFFERED_BYTES - 2 * 1024 * 1024) {
           await delay(100, undefined, { signal: abort.signal });
           lastProgress = Date.now();
           continue;
@@ -439,21 +413,27 @@ export class LiveService implements OnApplicationShutdown {
           const part = await waitForLiveRequest(sender.send(new Api.upload.GetFile({ location: new Api.InputGroupCallStream({ call, timeMs: bigInt(timeMs), scale: 0, videoChannel: 1, videoQuality: 2 }), offset: bigInt(0), limit: 1024 * 1024 })), abort.signal);
           check();
           if (!(part instanceof Api.upload.File)) throw new Error("Live resynchronization required");
-          const remuxed = remuxLivePart(Buffer.from(part.bytes), mediaTime);
-          if (signature && remuxed.signature !== signature) { publishPending(); epoch++; needsKeyframe = true; }
+          const remuxed = remuxLivePart(Buffer.from(part.bytes), sequence);
+          if (signature && remuxed.signature !== signature) { epoch++; needsKeyframe = true; }
           signature = remuxed.signature;
           timeMs += 1000;
           nextChunkAt += 1000;
           if (needsKeyframe && !remuxed.startsWithKeyframe) continue;
           needsKeyframe = false;
-          // Keep the per-second MP4 clock separate from the HLS sequence:
-          // three native parts share one HTTP segment and playlist entry.
-          mediaTime++;
-          session.timeline.mediaTime = mediaTime;
-          pending ??= { epoch, init: remuxed.init, parts: [], duration: 0 };
-          pending.parts.push(remuxed.media);
-          pending.duration++;
-          if (pending.duration >= HLS_SEGMENT_SECONDS) publishPending();
+          session.inits.set(epoch, remuxed.init);
+          session.segments.push({ sequence: sequence++, epoch, media: remuxed.media });
+          session.timeline.sequence = sequence;
+          session.timeline.epoch = epoch;
+          const active = session.segments.filter(segment => segment.expiresAt === undefined);
+          let activeBytes = active.reduce((size, segment) => size + segment.media.length, 0);
+          while (active.length > PLAYLIST_SEGMENTS || activeBytes > 12 * 1024 * 1024) {
+            const retired = active.shift();
+            if (!retired) break;
+            retired.expiresAt = Date.now() + RETIRED_SEGMENT_MS;
+            activeBytes -= retired.media.length;
+          }
+          this.pruneSegments(session);
+          if (active.length >= STARTUP_SEGMENTS) session.resolve();
           lastProgress = Date.now();
           resyncs = 0;
         } catch (error) {
@@ -490,7 +470,6 @@ export class LiveService implements OnApplicationShutdown {
             if (!current || current.state !== "live" || current.call?.id.toString() !== call.id.toString() || current.dcId !== broadcast.dcId) throw new Error("Broadcast changed");
           }
           sender = await acquireSender();
-          publishPending();
           timeMs = 0;
           epoch++;
           needsKeyframe = true;

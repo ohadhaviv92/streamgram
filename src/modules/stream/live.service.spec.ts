@@ -166,7 +166,7 @@ describe("Telegram live playback", () => {
     expect(first).toContain("#EXT-X-MEDIA-SEQUENCE:0");
     expect(invoke.mock.calls.filter(([request]) => request instanceof Api.phone.JoinGroupCall)).toHaveLength(1);
     const [sessionId, filename] = (first.trim().split("\n").at(-1) || "").split("/");
-    expect(live.asset(user, channelId, sessionId, filename)).toHaveLength(384);
+    expect(live.asset(user, channelId, sessionId, filename)).toHaveLength(128);
     const other = { ...user, token: "account-two", session_string: "session-two" };
     accounts[other.token] = { sessionString: other.session_string, selectedLiveChannels: [channelId] };
     expect(() => live.asset(other, channelId, sessionId, filename)).toThrow(NotFoundException);
@@ -175,10 +175,10 @@ describe("Telegram live playback", () => {
     expect(release).not.toHaveBeenCalled();
   });
 
-  it("starts with nine seconds buffered and a conservative live playback offset", async () => {
+  it("starts with six seconds buffered and a conservative live playback offset", async () => {
     const playlist = await live.playlist(user, channelId);
-    expect(playlist.match(/#EXTINF/g)?.length).toBeGreaterThanOrEqual(3);
-    expect(playlist).toContain("#EXT-X-START:TIME-OFFSET=-9.000,PRECISE=NO");
+    expect(playlist.match(/#EXTINF/g)?.length).toBeGreaterThanOrEqual(6);
+    expect(playlist).toContain("#EXT-X-START:TIME-OFFSET=-6.000,PRECISE=NO");
   });
 
   it("paces requests to the broadcast clock instead of repeatedly asking for future chunks", async () => {
@@ -227,16 +227,16 @@ describe("Telegram live playback", () => {
       return original(request);
     });
     const opening = live.playlist(user, channelId);
-    await jest.advanceTimersByTimeAsync(9000);
-    expect((await opening).match(/#EXTINF/g)?.length).toBeGreaterThanOrEqual(3);
+    await jest.advanceTimersByTimeAsync(5000);
+    expect((await opening).match(/#EXTINF/g)?.length).toBeGreaterThanOrEqual(6);
     for (let i = 0; i < 24; i++) {
       await jest.advanceTimersByTimeAsync(5000);
       const playlist = await live.playlist(user, channelId);
       const [sessionId, file] = required(playlist.trim().split("\n").at(-1)).split("/");
-      expect(live.asset(user, channelId, sessionId, file)).toHaveLength(384);
+      expect(live.asset(user, channelId, sessionId, file)).toHaveLength(128);
       expect(release).not.toHaveBeenCalled();
     }
-    expect(downloads).toBeLessThanOrEqual(145);
+    expect(downloads).toBeLessThanOrEqual(135);
     expect(invoke.mock.calls.filter(([request]) => request instanceof Api.phone.JoinGroupCall)).toHaveLength(1);
   });
 
@@ -244,7 +244,7 @@ describe("Telegram live playback", () => {
     const first = await live.playlist(user, channelId);
     await jest.advanceTimersByTimeAsync(27_000);
     const current = await live.playlist(user, channelId);
-    expect(current.match(/#EXTINF/g)?.length).toBe(4);
+    expect(current.match(/#EXTINF/g)?.length).toBe(12);
     const [sessionId, filename] = (first.trim().split("\n").at(-1) || "").split("/");
     expect(() => live.asset(user, channelId, sessionId, filename)).toThrow(NotFoundException);
     await jest.advanceTimersByTimeAsync(30_000);
@@ -260,7 +260,7 @@ describe("Telegram live playback", () => {
     const [sessionId, filename] = uri.split("/");
     await jest.advanceTimersByTimeAsync(10_000);
     expect(await live.playlist(user, channelId)).not.toContain(uri);
-    expect(live.asset(user, channelId, sessionId, filename)).toHaveLength(384);
+    expect(live.asset(user, channelId, sessionId, filename)).toHaveLength(128);
   });
 
   it("retains old initialization maps through codec changes until their segments expire", async () => {
@@ -271,7 +271,7 @@ describe("Telegram live playback", () => {
     const current = await live.playlist(user, channelId);
     expect(current).not.toContain("init-0.mp4");
     expect(live.asset(user, channelId, sessionId, "init-0.mp4")).toEqual(Buffer.from("init"));
-    await jest.advanceTimersByTimeAsync(18_000);
+    await jest.advanceTimersByTimeAsync(14_000);
     expect(() => live.asset(user, channelId, sessionId, "init-0.mp4")).toThrow(NotFoundException);
   });
 
@@ -298,7 +298,7 @@ describe("Telegram live playback", () => {
       await jest.advanceTimersByTimeAsync(20_000);
       const playlist = await live.playlist(user, channelId);
       const [sessionId, filename] = required(playlist.trim().split("\n").at(-1)).split("/");
-      expect(live.asset(user, channelId, sessionId, filename)).toHaveLength(384);
+      expect(live.asset(user, channelId, sessionId, filename)).toHaveLength(128);
       expect(release).not.toHaveBeenCalled();
     }
     await jest.advanceTimersByTimeAsync(30_000);
@@ -312,7 +312,7 @@ describe("Telegram live playback", () => {
       const playlist = await live.playlist(user, channelId);
       const [sessionId, filename] = required(playlist.split("\n").find(line => line.endsWith(".m4s"))).split("/");
       await jest.advanceTimersByTimeAsync(10_000);
-      expect(live.asset(user, channelId, sessionId, filename)).toHaveLength(384);
+      expect(live.asset(user, channelId, sessionId, filename)).toHaveLength(128);
       expect(release).not.toHaveBeenCalled();
     }
     expect(invoke.mock.calls.filter(([request]) => request instanceof Api.phone.JoinGroupCall)).toHaveLength(1);
@@ -335,7 +335,7 @@ describe("Telegram live playback", () => {
     const buffered = required(session).segments;
     expect(buffered.length).toBeLessThanOrEqual(48);
     expect(buffered.reduce((size, segment) => size + segment.media.length, 0)).toBeLessThanOrEqual(48 * 1024 * 1024);
-    expect(live.asset(user, channelId, sessionId, filename)).toHaveLength(3 * 1024 * 1024);
+    expect(live.asset(user, channelId, sessionId, filename)).toHaveLength(1024 * 1024);
     const calls = jest.mocked(remuxLivePart).mock.calls.length;
     await jest.advanceTimersByTimeAsync(1000);
     expect(jest.mocked(remuxLivePart).mock.calls.length - calls).toBeLessThanOrEqual(1);
