@@ -94,7 +94,7 @@ export class StreamController {
 
     return {
       id: "community.telegram-stream-addon",
-      version: "1.2.0",
+      version: "1.3.0",
       name: `StreamGram ${nodeEnv === "development" ? "(Dev)" : ""}`,
       description:
         "Search and stream movies/series directly from Telegram. Access your Telegram folders and channels in Stremio.",
