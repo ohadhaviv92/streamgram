@@ -13,11 +13,21 @@ export type LiveState = "live" | "offline" | "scheduled" | "unsupported" | "unav
 export type LiveItemType = "tv" | "movie";
 export interface LiveChannelStatus { channelId: string; title: string; state: LiveState; scheduledAt?: number }
 interface Broadcast extends LiveChannelStatus { call?: Api.InputGroupCall; dcId?: number }
-interface Segment { sequence: number; epoch: number; media: Buffer; expiresAt?: number }
+interface Segment { sequence: number; epoch: number; media: Buffer; duration: number; expiresAt?: number }
+interface LiveTimeline {
+  token: string;
+  channelId: string;
+  sessionString: string;
+  sequence: number;
+  mediaTime: number;
+  epoch: number;
+  expiresAt: number;
+}
 interface LiveSession {
   id: string;
   user: InstanceProfile;
   channelId: string;
+  timeline: LiveTimeline;
   abort: AbortController;
   touchedAt: number;
   segments: Segment[];
@@ -28,10 +38,15 @@ interface LiveSession {
   runner?: Promise<void>;
 }
 
-const PLAYLIST_SEGMENTS = 12;
+const PLAYLIST_SECONDS = 12;
+const HLS_SEGMENT_SECONDS = 3;
+const STARTUP_SECONDS = 9;
+const SOURCE_BUFFER_MS = 12_000;
+const CHUNK_PUBLISH_MARGIN_MS = 250;
+const NOT_READY_RETRY_MS = 500;
 // RFC 8216 section 6.2.2: retain removed media for a full playlist plus
 // its own duration, including the initialization map it still references.
-const RETIRED_SEGMENT_MS = (PLAYLIST_SEGMENTS + 1) * 1000;
+const RETIRED_SEGMENT_MS = (PLAYLIST_SECONDS + HLS_SEGMENT_SECONDS) * 1000;
 const MAX_BUFFERED_SEGMENTS = 48;
 const MAX_BUFFERED_BYTES = 48 * 1024 * 1024;
 
@@ -64,6 +79,7 @@ const labels: Record<SupportedLanguage, Record<LiveState, string>> = {
 @Injectable()
 export class LiveService implements OnApplicationShutdown {
   private readonly sessions = new Map<string, LiveSession>();
+  private readonly timelines = new Map<string, LiveTimeline>();
   private readonly receivers = new Set<Promise<void>>();
   private readonly peersReady = new WeakMap<TelegramClient, Promise<unknown>>();
   private readonly channelTitles = new WeakMap<TelegramClient, Map<string, string>>();
@@ -71,13 +87,17 @@ export class LiveService implements OnApplicationShutdown {
   private readonly unsupported = new Map<string, string>();
   private readonly cleanup: ReturnType<typeof setInterval>;
   private shuttingDown = false;
-  private readonly securityChanged = () => { for (const session of this.sessions.values()) this.stop(session); this.statuses.clear(); this.unsupported.clear(); };
+  private readonly securityChanged = () => { for (const session of this.sessions.values()) this.stop(session); this.statuses.clear(); this.unsupported.clear(); this.timelines.clear(); };
   private readonly accountsChanged = () => {
     this.statuses.clear();
     this.unsupported.clear();
     for (const session of this.sessions.values()) {
       const account = this.config.getUserByToken(session.user.token);
       if (!account || account.sessionString !== session.user.session_string || !account.selectedLiveChannels?.includes(session.channelId)) this.stop(session);
+    }
+    for (const [key, timeline] of this.timelines) {
+      const account = this.config.getUserByToken(timeline.token);
+      if (!account || account.sessionString !== timeline.sessionString || !account.selectedLiveChannels?.includes(timeline.channelId)) this.timelines.delete(key);
     }
   };
 
@@ -88,6 +108,9 @@ export class LiveService implements OnApplicationShutdown {
       for (const session of this.sessions.values()) {
         if (Date.now() - session.touchedAt >= 30_000) this.stop(session);
         else this.pruneSegments(session);
+      }
+      for (const [key, timeline] of this.timelines) {
+        if (!this.sessions.has(key) && timeline.expiresAt <= Date.now()) this.timelines.delete(key);
       }
     }, 1000);
     this.cleanup.unref();
@@ -223,12 +246,20 @@ export class LiveService implements OnApplicationShutdown {
     const key = this.key(user, channelId);
     let session = this.sessions.get(key);
     if (!session || session.abort.signal.aborted) {
+      // The playlist URL is stable across receivers. Resetting its sequence to
+      // zero after a failure makes existing HLS players ignore all new media.
+      let timeline = this.timelines.get(key);
+      if (!timeline || timeline.sessionString !== user.session_string) {
+        timeline = { token: user.token, channelId, sessionString: user.session_string, sequence: 0, mediaTime: 0, epoch: 0, expiresAt: 0 };
+        this.timelines.set(key, timeline);
+      } else timeline.epoch++;
+      timeline.expiresAt = Date.now() + 15 * 60_000;
       let resolve!: () => void;
       let reject!: (error: Error) => void;
       const ready = new Promise<void>((yes, no) => { resolve = yes; reject = no; });
       // The owner may disconnect before its first playlist finishes preparing.
       void ready.catch(() => undefined);
-      session = { id: randomBytes(12).toString("hex"), user: { ...user }, channelId, abort: new AbortController(), touchedAt: Date.now(),
+      session = { id: randomBytes(12).toString("hex"), user: { ...user }, channelId, timeline, abort: new AbortController(), touchedAt: Date.now(),
         segments: [], inits: new Map(), ready, resolve, reject };
       this.sessions.set(key, session);
       session.runner = this.receive(session);
@@ -241,7 +272,7 @@ export class LiveService implements OnApplicationShutdown {
     if (session.abort.signal.aborted) throw new ServiceUnavailableException("Live playback has ended");
     this.pruneSegments(session);
     const segments = session.segments.filter(segment => segment.expiresAt === undefined);
-    const lines = ["#EXTM3U", "#EXT-X-VERSION:7", "#EXT-X-TARGETDURATION:1", `#EXT-X-MEDIA-SEQUENCE:${segments[0].sequence}`,
+    const lines = ["#EXTM3U", "#EXT-X-VERSION:7", `#EXT-X-TARGETDURATION:${HLS_SEGMENT_SECONDS}`, `#EXT-X-START:TIME-OFFSET=-${STARTUP_SECONDS}.000,PRECISE=NO`, `#EXT-X-MEDIA-SEQUENCE:${segments[0].sequence}`,
       `#EXT-X-DISCONTINUITY-SEQUENCE:${segments[0].epoch}`];
     let epoch: number | undefined;
     for (const segment of segments) {
@@ -250,7 +281,7 @@ export class LiveService implements OnApplicationShutdown {
         lines.push(`#EXT-X-MAP:URI="${session.id}/init-${segment.epoch}.mp4"`);
         epoch = segment.epoch;
       }
-      lines.push("#EXTINF:1.000,", `${session.id}/segment-${segment.sequence}.m4s`);
+      lines.push(`#EXTINF:${segment.duration.toFixed(3)},`, `${session.id}/segment-${segment.sequence}.m4s`);
     }
     return `${lines.join("\n")}\n`;
   }
@@ -279,6 +310,7 @@ export class LiveService implements OnApplicationShutdown {
   }
 
   private stop(session: LiveSession) {
+    session.timeline.expiresAt = Date.now() + 15 * 60_000;
     session.abort.abort();
     session.reject(new ServiceUnavailableException("Live playback ended or is unavailable"));
     if (this.sessions.get(this.key(session.user, session.channelId)) === session) this.sessions.delete(this.key(session.user, session.channelId));
@@ -329,11 +361,12 @@ export class LiveService implements OnApplicationShutdown {
       let sender = await acquireSender();
       const join = async () => {
         check();
-        source = randomInt(1, 0x7fffffff);
+        const joiningSource = randomInt(1, 0x7fffffff);
         // RTMP stream-only receive payload, verified against the target live
         // broadcast. No WebRTC transport or published media is negotiated.
         const updates = await activeClient.invoke(new Api.phone.JoinGroupCall({ call: activeCall, joinAs: new Api.InputPeerSelf(), muted: true, videoStopped: true,
-          params: new Api.DataJSON({ data: JSON.stringify({ ssrc: source, ufrag: randomBytes(8).toString("hex"), pwd: randomBytes(16).toString("hex"), fingerprints: [] }) }) }));
+          params: new Api.DataJSON({ data: JSON.stringify({ ssrc: joiningSource, ufrag: randomBytes(8).toString("hex"), pwd: randomBytes(16).toString("hex"), fingerprints: [] }) }) }));
+        source = joiningSource;
         joined = true;
         check();
         const connection = "updates" in updates ? updates.updates.find(update => update instanceof Api.UpdateGroupCallConnection) : undefined;
@@ -342,8 +375,32 @@ export class LiveService implements OnApplicationShutdown {
       };
       await join();
       let timeMs = 0;
-      let sequence = 0;
-      let epoch = 0;
+      let nextChunkAt = 0;
+      let sequence = session.timeline.sequence;
+      let mediaTime = session.timeline.mediaTime;
+      let pending: { epoch: number; init: Buffer; parts: Buffer[]; duration: number } | undefined;
+      const publishPending = () => {
+        if (!pending) return;
+        const part = pending;
+        pending = undefined;
+        session.inits.set(part.epoch, part.init);
+        session.segments.push({ sequence: sequence++, epoch: part.epoch, media: Buffer.concat(part.parts), duration: part.duration });
+        session.timeline.sequence = sequence;
+        session.timeline.epoch = part.epoch;
+        const active = session.segments.filter(segment => segment.expiresAt === undefined);
+        let activeBytes = active.reduce((size, segment) => size + segment.media.length, 0);
+        let activeSeconds = active.reduce((seconds, segment) => seconds + segment.duration, 0);
+        while (activeSeconds > PLAYLIST_SECONDS || activeBytes > 12 * 1024 * 1024) {
+          const retired = active.shift();
+          if (!retired) break;
+          retired.expiresAt = Date.now() + RETIRED_SEGMENT_MS;
+          activeBytes -= retired.media.length;
+          activeSeconds -= retired.duration;
+        }
+        this.pruneSegments(session);
+        if (activeSeconds >= STARTUP_SECONDS) session.resolve();
+      };
+      let epoch = session.timeline.epoch;
       let signature = "";
       let needsKeyframe = true;
       let lastProgress = Date.now();
@@ -354,7 +411,8 @@ export class LiveService implements OnApplicationShutdown {
         // Pause a burst of catch-up downloads rather than evicting media that
         // was already promised to a viewer. Reserve room for the next 1 MiB part.
         if (session.segments.length >= MAX_BUFFERED_SEGMENTS ||
-            session.segments.reduce((size, segment) => size + segment.media.length, 0) >= MAX_BUFFERED_BYTES - 2 * 1024 * 1024) {
+            session.segments.reduce((size, segment) => size + segment.media.length, 0) +
+              (pending?.parts.reduce((size, bytes) => size + bytes.length, 0) ?? 0) >= MAX_BUFFERED_BYTES - 4 * 1024 * 1024) {
           await delay(100, undefined, { signal: abort.signal });
           lastProgress = Date.now();
           continue;
@@ -365,40 +423,65 @@ export class LiveService implements OnApplicationShutdown {
             const channels = await waitForLiveRequest(sender.send(new Api.phone.GetGroupCallStreamChannels({ call })), abort.signal);
             check();
             if (!(channels instanceof Api.phone.GroupCallStreamChannels)) throw new Error("Invalid stream channels");
-            const video = channels.channels.find(channel => channel.channel === 1 && channel.scale === 0);
-            timeMs = video ? Math.floor(Number(video.lastTimestampMs.toString()) / 1000) * 1000 - 2000 : 0;
+            // RTMP uses one-second unified parts even when the deprecated
+            // advertised scale differs. Bootstrap further behind the edge so
+            // startup has a useful buffer instead of racing the publisher.
+            const video = channels.channels.find(channel => channel.channel === 1);
+            timeMs = video ? Math.floor(Number(video.lastTimestampMs.toString()) / 1000) * 1000 - SOURCE_BUFFER_MS : 0;
             if (timeMs <= 0) { timeMs = 0; await delay(1000, undefined, { signal: abort.signal }); continue; }
+            // Use the observed source/local-clock offset, not the machine's
+            // absolute clock. Once caught up, wait for each part to complete.
+            nextChunkAt = Date.now() - SOURCE_BUFFER_MS + 1000 + CHUNK_PUBLISH_MARGIN_MS;
           }
+          const waitMs = nextChunkAt - Date.now();
+          if (waitMs > 0) await delay(waitMs, undefined, { signal: abort.signal });
+          check();
           const part = await waitForLiveRequest(sender.send(new Api.upload.GetFile({ location: new Api.InputGroupCallStream({ call, timeMs: bigInt(timeMs), scale: 0, videoChannel: 1, videoQuality: 2 }), offset: bigInt(0), limit: 1024 * 1024 })), abort.signal);
           check();
           if (!(part instanceof Api.upload.File)) throw new Error("Live resynchronization required");
-          const remuxed = remuxLivePart(Buffer.from(part.bytes), sequence);
-          if (signature && remuxed.signature !== signature) { epoch++; needsKeyframe = true; }
+          const remuxed = remuxLivePart(Buffer.from(part.bytes), mediaTime);
+          if (signature && remuxed.signature !== signature) { publishPending(); epoch++; needsKeyframe = true; }
           signature = remuxed.signature;
           timeMs += 1000;
+          nextChunkAt += 1000;
           if (needsKeyframe && !remuxed.startsWithKeyframe) continue;
           needsKeyframe = false;
-          session.inits.set(epoch, remuxed.init);
-          session.segments.push({ sequence: sequence++, epoch, media: remuxed.media });
-          const active = session.segments.filter(segment => segment.expiresAt === undefined);
-          let activeBytes = active.reduce((size, segment) => size + segment.media.length, 0);
-          while (active.length > PLAYLIST_SEGMENTS || activeBytes > 12 * 1024 * 1024) {
-            const retired = active.shift();
-            if (!retired) break;
-            retired.expiresAt = Date.now() + RETIRED_SEGMENT_MS;
-            activeBytes -= retired.media.length;
-          }
-          this.pruneSegments(session);
-          if (active.length >= 3) session.resolve();
+          // Keep the per-second MP4 clock separate from the HLS sequence:
+          // three native parts share one HTTP segment and playlist entry.
+          mediaTime++;
+          session.timeline.mediaTime = mediaTime;
+          pending ??= { epoch, init: remuxed.init, parts: [], duration: 0 };
+          pending.parts.push(remuxed.media);
+          pending.duration++;
+          if (pending.duration >= HLS_SEGMENT_SECONDS) publishPending();
           lastProgress = Date.now();
           resyncs = 0;
         } catch (error) {
           if (abort.signal.aborted || error instanceof UnsupportedLiveMediaError) throw error;
           const code = (error as { errorMessage?: string }).errorMessage || "";
-          if (code === "TIME_TOO_BIG" || /^FLOOD_WAIT(?:_\d+)?$/.test(code)) { await delay(100, undefined, { signal: abort.signal }); continue; }
+          if (code === "TIME_TOO_BIG" || /^FLOOD_WAIT(?:_\d+)?$/.test(code)) {
+            // A late publication adjusts the clock for subsequent parts too;
+            // do not poll the same future timestamp ten times per second.
+            nextChunkAt = Date.now() + NOT_READY_RETRY_MS;
+            continue;
+          }
           const reason = /^[A-Z][A-Z0-9_]{0,63}$/.test(code) ? code : error instanceof Error ? error.constructor.name : "Error";
-          logger.warn({ reason, attempt: resyncs + 1 }, "Telegram live playback resynchronizing");
+          const rejoin = code === "GROUPCALL_JOIN_MISSING" || code === "GROUPCALL_FORBIDDEN";
+          const reconnect = !code && error instanceof Error &&
+            (error.message === "Live request timed out" || error.name === "SlotRemovedError" || sender.isConnected?.() === false);
+          logger.warn({ reason, attempt: resyncs + 1 }, rejoin ? "Telegram live playback rejoining"
+            : reconnect ? "Telegram live media connection reconnecting" : "Telegram live playback resynchronizing");
           if (++resyncs > 3) throw new Error("Live resynchronization failed");
+          // Membership/transport loss does not change the publisher's media.
+          // Recreate only that connection, then retry the exact same part.
+          // Rewinding to the live edge here discards reference frames and can
+          // leave a player stuck after an otherwise recoverable interruption.
+          if (rejoin || reconnect) {
+            if (rejoin) await join();
+            else sender = await acquireSender();
+            lastProgress = Date.now();
+            continue;
+          }
           // Recheck full channel details only when Telegram reports a call
           // error, rather than interrupting healthy playback with polling.
           if (code.startsWith("GROUPCALL_")) {
@@ -406,8 +489,8 @@ export class LiveService implements OnApplicationShutdown {
             check();
             if (!current || current.state !== "live" || current.call?.id.toString() !== call.id.toString() || current.dcId !== broadcast.dcId) throw new Error("Broadcast changed");
           }
-          if (code === "GROUPCALL_JOIN_MISSING" || code === "GROUPCALL_FORBIDDEN") await join();
           sender = await acquireSender();
+          publishPending();
           timeMs = 0;
           epoch++;
           needsKeyframe = true;
@@ -450,5 +533,6 @@ export class LiveService implements OnApplicationShutdown {
     await Promise.allSettled([...this.receivers]);
     this.statuses.clear();
     this.unsupported.clear();
+    this.timelines.clear();
   }
 }
